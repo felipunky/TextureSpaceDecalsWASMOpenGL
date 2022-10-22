@@ -13,7 +13,7 @@ void main()
     positions = VertexPosition.xyz;
     texCoords = VertexTextureCoords;     
     normals = VertexNormals;
-    gl_Position = vec4(VertexPosition.xyz * 2. - 1., 1.);
+    gl_Position = vec4(VertexTextureCoords.xy * 2. - 1., 0., 1.);
 
     /*mat3 normalMatrix = transpose(inverse(mat3(model)));
     normals = normalMatrix * VertexNormals;                         

@@ -332,8 +332,9 @@ void ObjLoader(Shader* shader)
 {
     //std::string inputfile = "Assets/dickies_long_sleeve_shirt/shirt.obj";
 	//std::string inputfile = "Assets/crate.obj";
-    std::string inputfile = "Assets/shirtTwo.obj";
+    //std::string inputfile = "Assets/shirtTwo.obj";
     //std::string inputfile = "Assets/Shirt/BetterTShirt/BetterShirt.obj";
+    std::string inputfile = "Assets/t-shirt-lp/source/Shirt.obj";
 
 	std::istringstream stream(LoadTextFile(inputfile));
     //membuf sbuf(objFile, nullptr);
@@ -397,14 +398,16 @@ void ObjLoader(Shader* shader)
         }
     }
 
-    /*shader->createTexture(&(material.baseColor), "Assets/dickies_long_sleeve_shirt/textures/Shirt_baseColor.jpeg", "BaseColor", 0);
-    shader->createTexture(&(material.normal), "Assets/dickies_long_sleeve_shirt/textures/Shirt_normal.png", "Normal", 1);
-    shader->createTexture(&(material.roughness), "Assets/dickies_long_sleeve_shirt/textures/Shirt_metallicRoughness.png", "Roughness", 2);*/
-    shader->createTexture(&(material.baseColor), "Assets/Textures/rustediron1-alt2-Unreal-Engine/rustediron2_basecolor.png", "BaseColor", 0);
-    shader->createTexture(&(material.normal), "Assets/Textures/rustediron1-alt2-Unreal-Engine/rustediron2_normal.png", "Normal", 1);
-    shader->createTexture(&(material.roughness), "Assets/Textures/rustediron1-alt2-Unreal-Engine/rustediron2_roughness.png", "Roughness", 2);
+    // shader->createTexture(&(material.baseColor), "Assets/Textures/rustediron1-alt2-Unreal-Engine/rustediron2_basecolor.png", "BaseColor", 0);
+    // shader->createTexture(&(material.normal), "Assets/Textures/rustediron1-alt2-Unreal-Engine/rustediron2_normal.png", "Normal", 1);
+    // shader->createTexture(&(material.roughness), "Assets/Textures/rustediron1-alt2-Unreal-Engine/rustediron2_roughness.png", "Roughness", 2);
+    // shader->createTexture(&(material.metallic), "Assets/Textures/rustediron1-alt2-Unreal-Engine/rustediron2_metallic.png", "Metallic", 3);
+
+    shader->createTexture(&(material.baseColor), "Assets/t-shirt-lp/textures/T_shirt_albedo.jpg", "BaseColor", 0);
+    shader->createTexture(&(material.normal), "Assets/t-shirt-lp/textures/T_shirt_normal.png", "Normal", 1);
+    shader->createTexture(&(material.roughness), "Assets/t-shirt-lp/textures/T_shirt_roughness.jpg", "Roughness", 2);
     shader->createTexture(&(material.metallic), "Assets/Textures/rustediron1-alt2-Unreal-Engine/rustediron2_metallic.png", "Metallic", 3);
-    /*shader->createTexture(&(material.ao), "Assets/Textures/rustediron1-alt2-Unreal-Engine/rustediron2_metallic.png", "AmbientOcclussion", 4);*/
+    shader->createTexture(&(material.ao), "Assets/t-shirt-lp/textures/T_shirt_AO.jpg", "AmbientOcclussion", 4);
 
     std::cout << "Vertices: " << modelDataVertices.size() << "\n";
     std::cout << "Normals: " << modelDataNormals.size() << "\n";
@@ -452,7 +455,6 @@ int main()
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO(); (void)io;
-    //io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
     // For an Emscripten build we are disabling file-system access, so let's not attempt to do a fopen() of the imgui.ini file.
     // You may manually call LoadIniSettingsFromMemory() to load settings from your own storage.
@@ -888,9 +890,7 @@ int main()
         glEnable(GL_DEPTH_TEST);
         glDepthMask(true);
         glCullFace(GL_BACK);
-        glBindFramebuffer(GL_FRAMEBUFFER, gBuffer);
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); 
+        glBindFramebuffer(GL_FRAMEBUFFER, gBuffer); 
         
         geometryPass.use();
         glm::mat4 mm = glm::mat4(1.0f);
@@ -912,6 +912,8 @@ int main()
         glEnable(GL_SCISSOR_TEST);
         glViewport(0, 0, screenWidth/2, screenHeight);
         glScissor(0, 0, screenWidth/2, screenHeight);
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glDrawElements(GL_TRIANGLES, indexes.size(), GL_UNSIGNED_INT, 0);
 
@@ -920,7 +922,7 @@ int main()
 
         // 2. lighting pass: calculate lighting by iterating over a screen filled quad pixel-by-pixel using the gbuffer's content.
         // -----------------------------------------------------------------------------------------------------------------------
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        
         deferredPass.use();
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, gPosition);
@@ -939,6 +941,7 @@ int main()
         glEnable(GL_SCISSOR_TEST);
         glViewport(0, 0, screenWidth/2, screenHeight);
         glScissor(0, 0, screenWidth/2, screenHeight);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         renderQuad();
 
@@ -977,9 +980,8 @@ int main()
 
         // Draw texture baker.
         //glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glBindFramebuffer(GL_FRAMEBUFFER, baker);
-        // glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-        // glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); 
+        //glBindFramebuffer(GL_FRAMEBUFFER, baker);
+        
         bakePass.use();
         glBindVertexArray(VAO); // seeing as we only have a single VAO there's no need to bind it every time, but we'll do so to keep things a bit more organized        
         glActiveTexture(GL_TEXTURE0);
@@ -996,10 +998,11 @@ int main()
         glEnable(GL_SCISSOR_TEST);
         glViewport(screenWidth/2, 0, screenWidth/2, screenHeight);
         glScissor(screenWidth/2, 0, screenWidth/2, screenHeight);
-
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); 
         glDrawElements(GL_TRIANGLES, indexes.size(), GL_UNSIGNED_INT, 0);
 
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        //glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glBindVertexArray(0);
 
         ImGui::Render();

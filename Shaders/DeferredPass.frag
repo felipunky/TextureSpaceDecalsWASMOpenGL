@@ -69,29 +69,11 @@ vec3 fresnelSchlick(float cosTheta, vec3 F0)
 
 void main()
 {             
-    // retrieve data from gbuffer
-    /*vec3 FragPos = texture(gPosition, TexCoords).xyz;
-
-    // vec4 worldPos = vec4(FragPos, 1.0);
-    // worldPos = inverse(projection) * worldPos;
-    // worldPos = inverse(view) * worldPos;
-
-    // vec3 albedo     = pow(texture(gAlbedo, TexCoords).rgb, vec3(2.2));
-    // float metallic  = texture(gMetallic, TexCoords).r;
-    // float roughness = texture(gRoughness, TexCoords).r;
-    // float ao        = texture(gAO, TexCoords).r;
-
-    vec3 viewDir  = normalize(viewPos - FragPos);
-    vec3 lig = normalize(vec3(0.7, 0.8, 0.4) - FragPos);
-    vec3 Normal = texture(gNormal, TexCoords).rgb;
-    vec3 Diffuse = texture(gAlbedo, TexCoords).rgb * max(0., dot(lig, Normal));
-    //float Specular = texture(gAlbedoSpec, TexCoords).a * pow(max(0., dot(reflect(-viewDir, Normal), lig)), 32.);
-    FragColor = vec4(Diffuse, 1.0);*/
     vec3 FragPos = texture(gPosition, TexCoords).xyz;
     vec3 albedo     = pow(texture(gAlbedo, TexCoords).rgb, vec3(2.2));
-    float metallic  = texture(gMetallic, TexCoords).r;
+    float metallic  = 0.0;//texture(gMetallic, TexCoords).r;
     float roughness = texture(gRoughness, TexCoords).r;
-    //float ao        = texture(aoMap, TexCoords).r;
+    float ao        = texture(gAO, TexCoords).r;
 
     vec3 N = getNormalFromMap();
     vec3 V = normalize(viewPos - FragPos);
@@ -142,7 +124,7 @@ void main()
     
     // ambient lighting (note that the next IBL tutorial will replace 
     // this ambient lighting with environment lighting).
-    vec3 ambient = vec3(0.03) * albedo;// * ao;
+    vec3 ambient = vec3(0.03) * albedo * ao;
     
     vec3 color = ambient + Lo;
 

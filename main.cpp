@@ -683,6 +683,8 @@ int main()
     decalsPass.createTexture(&decalTexture, "Assets/Textures/Batman.png", "iChannel0", 1);
     //std::cout << "Decal Texture binding: " << decalTexture << std::endl;
 
+    int flip = 0;
+
     int click = 0;
 
     int halfWidth = WIDTH/2, halfHeight = HEIGHT/2;
@@ -694,6 +696,7 @@ int main()
         {
             //decalsPass.createTexture(&decalTexture, "Assets/Textures/WatchMen.jpeg", "iChannel0", 1);
             //decalsPass.createTextureFromFile(&decalTexture, decalImageBuffer, widthDecal, heightDecal, "iChannel0", 1);
+            flip = 1;
             glGenTextures(1, &decalTexture);
             glBindTexture(GL_TEXTURE_2D, decalTexture);
 
@@ -724,7 +727,7 @@ int main()
             // Bind the uniform sampler.
             decalsPass.use();
             decalsPass.setInt("iChannel0", 1);
-            //this->setInt(samplerName, uniform);
+            // //this->setInt(samplerName, uniform);
         }
         /*else
         {
@@ -849,8 +852,8 @@ int main()
         ImGuizmo::BeginFrame();
 
         ImGui::Begin( "Graphical User Interface" );   // Pass a pointer to our bool variable (the window will have a closing button that will clear the bool when clicked)
-        std::string printTime = std::to_string(deltaTime * 1000.0f) + " ms.\n";
-		ImGui::Text(printTime.c_str());
+        auto printTime = (std::to_string(deltaTime * 1000.0f) + " ms.\n").c_str();
+		ImGui::Text(printTime);
         ImGui::SliderFloat( "Test", &test, 1.0f, 100.0f );
         if (ImGui::Button("Click me")) 
         {
@@ -960,6 +963,7 @@ int main()
         decalsPass.setVec3("camPos", camPos);
         decalsPass.setVec3("camDir", camFront);
         decalsPass.setFloat("iTest", test);
+        decalsPass.setFloat("iFlip", flip);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, rboDepth);
         glDisable(GL_DEPTH_TEST);

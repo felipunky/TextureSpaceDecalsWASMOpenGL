@@ -10,6 +10,7 @@ uniform sampler2D iChannel0;
 uniform vec3 camPos;
 uniform vec3 camDir;
 uniform float iTest;
+uniform float iFlip;
 
 in vec2 texCoords;
 in vec3 iPosition;
@@ -50,6 +51,11 @@ void main()
     if (worldPos.x < -1.0 || worldPos.x > 1.0 || worldPos.y < -1.0 || worldPos.y > 1.0 || worldPos.z < -1.0 || worldPos.z > 1.0)
     {
         discard;
+    }
+
+    if (iFlip == 1.0)
+    {
+        worldPos.y = 1. - worldPos.y;
     }
 
     FragColor = texture(iChannel0, (worldPos.xy + 0.5) * iTest);//vec4(1, 0, 0, 1);

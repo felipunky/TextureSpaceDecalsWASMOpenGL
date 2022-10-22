@@ -210,39 +210,36 @@ public:
 	void createTextureFromFile(unsigned int* texture, uint8_t* buffer, int width, int height, std::string samplerName,
 		int uniform)
 	{
-		if ((*texture) != -1)
-		{
-			glGenTextures(1, texture);
-			glBindTexture(GL_TEXTURE_2D, *texture);
-
-			// In an ideal world this should be exposed as input params to the function.
-			// Texture wrapping params.
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-			// Texture filtering params.
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		}
-
-		// Get the texture format automatically.
-		auto format = GL_RGBA;
 		if (buffer)
-		{
-			std::cout << "Buffer not zero" << std::endl;
+        {
+            glGenTextures(1, texture);
+            glBindTexture(GL_TEXTURE_2D, *texture);
+
+            // In an ideal world this should be exposed as input params to the function.
+            // Texture wrapping params.
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+            // Texture filtering params.
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+            // Get the texture format automatically.
+            auto format = GL_RGBA;
 			glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, buffer);
 			glGenerateMipmap(GL_TEXTURE_2D);
-		}
+            
+            // Clear the data.
+            free(buffer);
+
+            // Bind the uniform sampler.
+            // Bind the uniform sampler.
+			this->use();
+			this->setInt(samplerName, uniform);
+        }
 		else
 		{
 			throw std::runtime_error("Failed to load texture!");
 		}
-		// Clear the data.
-		free(buffer);
-		//buffer.clear();
-
-		// Bind the uniform sampler.
-		this->use();
-		this->setInt(samplerName, uniform);
 	}
 
 private:

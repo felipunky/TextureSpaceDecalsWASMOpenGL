@@ -16,6 +16,8 @@ shaderPath = currentPath + "/Shaders@/Shaders"
 assetsPath = currentPath + "/Assets@/Assets"
 webGLVersion = "-s MIN_WEBGL_VERSION=2 "
 webGLVersion += "-s MAX_WEBGL_VERSION=2 "
+exportedRuntimeMethods = "-s EXPORTED_RUNTIME_METHODS=['ccall','cwrap'] "
+exportedMethods = "-s EXPORT_ALL=1 "#'-s EXPORTED_FUNCTIONS=["_free", "_malloc"] '
 
 if optimize:
     optimizationLevel = "-O2 "
@@ -49,6 +51,7 @@ emscriptenCommand = "emcc " + \
                     "-s GL_DEBUG=1 " + \
                     webGLVersion + \
                     "-s ALLOW_MEMORY_GROWTH=1 " + \
+                    exportedRuntimeMethods + \
                     optimizationLevel + \
                     assertions + \
                     "-o index.js"

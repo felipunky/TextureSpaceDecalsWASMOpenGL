@@ -7,10 +7,12 @@ uniform mat4 projection;
 uniform vec2 iResolution;
 uniform sampler2D iDepth;
 uniform sampler2D iChannel0;
+uniform sampler2D iRender;
 uniform vec3 camPos;
 uniform vec3 camDir;
 uniform float iTest;
 uniform float iFlip;
+uniform float iBlend;
 
 in vec2 texCoords;
 in vec3 iPosition;
@@ -31,6 +33,7 @@ void main()
 {
 
     vec2 uv = gl_FragCoord.xy / iResolution.xy;//gl_FragCoord.xy / iResolution.xy;
+    vec4 renderResult = texture(iRender, uv);
 
     float depth = texture(iDepth, uv).r;
 
@@ -50,7 +53,9 @@ void main()
 
     if (worldPos.x < -1.0 || worldPos.x > 1.0 || worldPos.y < -1.0 || worldPos.y > 1.0 || worldPos.z < -1.0 || worldPos.z > 1.0)
     {
-        discard;
+        //discard;
+        worldPos *= 0.;
+        FragColor = renderResult;
     }
 
     if (iFlip == 1.0)
@@ -58,5 +63,7 @@ void main()
         worldPos.y = 1. - worldPos.y;
     }
 
-    FragColor = texture(iChannel0, (worldPos.xy + 0.5) * iTest);//vec4(1, 0, 0, 1);
+    vec4 decalResult = texture(iChannel0, (worldPos.xy + 0.5) * iTest);
+
+    FragColor = vec4(mix(renderResult.rgb, decalResult.rgb, iBlend), renderResult.a);
 }

@@ -503,13 +503,19 @@ int main()
     Shader geometryPass = Shader("Shaders/GBuffer.vert", "Shaders/GBuffer.frag");   
     Shader deferredPass = Shader("Shaders/DeferredPass.vert", "Shaders/DeferredPass.frag");
     Shader decalsPass   = Shader("Shaders/Decals.vert", "Shaders/Decals.frag");
+    Shader renderTarget = Shader("Shaders/Render.vert", "Shaders/Render.frag");
+    Shader renderDecal  = Shader("Shaders/RenderDecal.vert", "Shaders/RenderDecal.frag");
     Shader bakePass     = Shader("Shaders/Baker.vert", "Shaders/Baker.frag");
+    
+    renderTarget.use();
+    renderTarget.setInt("iChannel0", 0);
+
+    renderDecal.use();
+    renderDecal.setInt("iChannel1", 0);
+    
     decalsPass.use();
     decalsPass.setInt("iDepth", 0);
-    
-
-    //unsigned int decalNormals;
-    //decalsPass.createTexture(&decalNormals, "");
+    decalsPass.setInt("iRender", 2);
 
     unsigned int gBuffer;
     glGenFramebuffers(1, &gBuffer);
@@ -521,7 +527,6 @@ int main()
                  gRoughness, 
                  gAO, 
                  rboDepth;
-    unsigned int baker;
 
      // create and attach depth buffer (renderbuffer)
     glGenTextures(1, &rboDepth);
@@ -581,17 +586,45 @@ int main()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT5, GL_TEXTURE_2D, gAO, 0);
 
-    // - Baker buffer
-    glGenTextures(1, &baker);
-    glBindTexture(GL_TEXTURE_2D, baker);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, WIDTH/2, HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT6, GL_TEXTURE_2D, baker, 0);
-
     // - tell OpenGL which color attachments we'll use (of this framebuffer) for rendering 
     unsigned int attachments[6] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3, GL_COLOR_ATTACHMENT4, GL_COLOR_ATTACHMENT5 };
     glDrawBuffers(6, attachments);
+
+    // Render to texture.
+    unsigned int fbo;
+    glGenFramebuffers(1, &fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
+    // - Screen space buffer
+    unsigned int render;
+    glGenTextures(1, &render);
+    glBindTexture(GL_TEXTURE_2D, render);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, WIDTH/2, HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, render, 0);
+
+    // Set the list of draw buffers.
+    unsigned int drawBuffers[1] = {GL_COLOR_ATTACHMENT0};
+    glDrawBuffers(1, drawBuffers); // "1" is the size of DrawBuffers
+
+    // Render to texture decals.
+    unsigned int fboDecal;
+    glGenFramebuffers(1, &fboDecal);
+    glBindFramebuffer(GL_FRAMEBUFFER, fboDecal);
+
+    // - Screen space buffer
+    unsigned int renderDecalTex;
+    glGenTextures(1, &renderDecalTex);
+    glBindTexture(GL_TEXTURE_2D, renderDecalTex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, WIDTH/2, HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderDecalTex, 0);
+
+    // Set the list of draw buffers.
+    unsigned int drawDecal[1] = {GL_COLOR_ATTACHMENT0};
+    glDrawBuffers(1, drawDecal); // "1" is the size of DrawBuffers
 
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
         std::cout << "Framebuffer not complete!" << std::endl;
@@ -666,6 +699,7 @@ int main()
     bool show_demo_window = true;
     
     float test = 1.0f;
+    float blend = 0.0f;
 	bool insideImGui = false;
     
 
@@ -851,10 +885,11 @@ int main()
         ImGui::NewFrame();
         ImGuizmo::BeginFrame();
 
-        ImGui::Begin( "Graphical User Interface" );   // Pass a pointer to our bool variable (the window will have a closing button that will clear the bool when clicked)
+        ImGui::Begin("Graphical User Interface");   // Pass a pointer to our bool variable (the window will have a closing button that will clear the bool when clicked)
         auto printTime = (std::to_string(deltaTime * 1000.0f) + " ms.\n").c_str();
 		ImGui::Text(printTime);
-        ImGui::SliderFloat( "Test", &test, 1.0f, 100.0f );
+        ImGui::SliderFloat("Test", &test, 1.0f, 100.0f);
+        ImGui::SliderFloat("Blend", &blend, 0.0f, 1.0f);
         if (ImGui::Button("Click me")) 
         {
             if (click == 0)
@@ -925,7 +960,7 @@ int main()
 
         // 2. lighting pass: calculate lighting by iterating over a screen filled quad pixel-by-pixel using the gbuffer's content.
         // -----------------------------------------------------------------------------------------------------------------------
-        
+        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
         deferredPass.use();
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, gPosition);
@@ -954,7 +989,22 @@ int main()
         // the internal formats are implementation defined. This works on all of my systems, but if it doesn't on yours you'll likely have to write to the 		
         // depth buffer in another shader stage (or somehow see to match the default framebuffer's internal format with the FBO's internal format).
         glBlitFramebuffer(0, 0, WIDTH, HEIGHT, 0, 0, WIDTH, HEIGHT, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+
+        renderTarget.use();
         glDisable(GL_DEPTH_TEST);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, render);
+
+        glEnable(GL_SCISSOR_TEST);
+        glViewport(0, 0, screenWidth/2, screenHeight);
+        glScissor(0, 0, screenWidth/2, screenHeight);
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        renderQuad();
+        
+        glDisable(GL_DEPTH_TEST);
+        glBindFramebuffer(GL_FRAMEBUFFER, fboDecal);
         decalsPass.use();
         decalsPass.setMat4("model", model);
         decalsPass.setMat4("projection", projection);
@@ -964,32 +1014,44 @@ int main()
         decalsPass.setVec3("camDir", camFront);
         decalsPass.setFloat("iTest", test);
         decalsPass.setFloat("iFlip", flip);
+        decalsPass.setFloat("iBlend", blend);
+
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, rboDepth);
-        glDisable(GL_DEPTH_TEST);
-
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, decalTexture);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, render);
 
         glEnable(GL_SCISSOR_TEST);
         glViewport(0, 0, screenWidth/2, screenHeight);
         glScissor(0, 0, screenWidth/2, screenHeight);
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        //renderQuad();
         renderCube();
-        glEnable(GL_DEPTH_TEST);
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glBindVertexArray(0);
 
+        renderDecal.use();
+        glDisable(GL_DEPTH_TEST);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, renderDecalTex);
+
+        glEnable(GL_SCISSOR_TEST);
+        glViewport(0, 0, screenWidth/2, screenHeight);
+        glScissor(0, 0, screenWidth/2, screenHeight);
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        renderQuad();
+
         // Draw texture baker.
-        //glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        //glBindFramebuffer(GL_FRAMEBUFFER, baker);
-        
         bakePass.use();
         glBindVertexArray(VAO); // seeing as we only have a single VAO there's no need to bind it every time, but we'll do so to keep things a bit more organized        
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, material.baseColor);
+        glBindTexture(GL_TEXTURE_2D, renderDecalTex);//material.baseColor);
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, material.normal);
         glActiveTexture(GL_TEXTURE2);
@@ -1008,6 +1070,8 @@ int main()
 
         //glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glBindVertexArray(0);
+
+        glEnable(GL_DEPTH_TEST);
 
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

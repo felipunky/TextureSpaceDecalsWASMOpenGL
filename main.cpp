@@ -512,6 +512,7 @@ int main()
 
     renderDecal.use();
     renderDecal.setInt("iChannel1", 0);
+    renderDecal.setInt("iChannel2", 1);
     
     decalsPass.use();
     decalsPass.setInt("iDepth", 0);
@@ -622,9 +623,17 @@ int main()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderDecalTex, 0);
 
+    unsigned int decalUVTex;
+    glGenTextures(1, &decalUVTex);
+    glBindTexture(GL_TEXTURE_2D, decalUVTex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, WIDTH/2, HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, decalUVTex, 0);
+
     // Set the list of draw buffers.
-    unsigned int drawDecal[1] = {GL_COLOR_ATTACHMENT0};
-    glDrawBuffers(1, drawDecal); // "1" is the size of DrawBuffers
+    unsigned int drawDecal[2] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
+    glDrawBuffers(2, drawDecal); // "1" is the size of DrawBuffers
 
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
         std::cout << "Framebuffer not complete!" << std::endl;
@@ -698,7 +707,7 @@ int main()
 
     bool show_demo_window = true;
     
-    float test = 1.0f;
+    float scale = 1.0f;
     float blend = 0.0f;
 	bool insideImGui = false;
     
@@ -888,7 +897,7 @@ int main()
         ImGui::Begin("Graphical User Interface");   // Pass a pointer to our bool variable (the window will have a closing button that will clear the bool when clicked)
         auto printTime = (std::to_string(deltaTime * 1000.0f) + " ms.\n").c_str();
 		ImGui::Text(printTime);
-        ImGui::SliderFloat("Test", &test, 1.0f, 100.0f);
+        ImGui::SliderFloat("Test", &scale, 1.0f, 100.0f);
         ImGui::SliderFloat("Blend", &blend, 0.0f, 1.0f);
         if (ImGui::Button("Click me")) 
         {
@@ -1010,9 +1019,7 @@ int main()
         decalsPass.setMat4("projection", projection);
         decalsPass.setMat4("view", view);
         decalsPass.setVec2("iResolution", widthHeight);
-        decalsPass.setVec3("camPos", camPos);
-        decalsPass.setVec3("camDir", camFront);
-        decalsPass.setFloat("iTest", test);
+        decalsPass.setFloat("iScale", scale);
         decalsPass.setFloat("iFlip", flip);
         decalsPass.setFloat("iBlend", blend);
 
@@ -1038,6 +1045,8 @@ int main()
         glDisable(GL_DEPTH_TEST);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, renderDecalTex);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, render);
 
         glEnable(GL_SCISSOR_TEST);
         glViewport(0, 0, screenWidth/2, screenHeight);
@@ -1049,17 +1058,20 @@ int main()
 
         // Draw texture baker.
         bakePass.use();
-        glBindVertexArray(VAO); // seeing as we only have a single VAO there's no need to bind it every time, but we'll do so to keep things a bit more organized        
+        glBindVertexArray(VAO); 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, renderDecalTex);//material.baseColor);
         glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, material.normal);
+        glBindTexture(GL_TEXTURE_2D, decalUVTex);// material.normal);
         glActiveTexture(GL_TEXTURE2);
         glBindTexture(GL_TEXTURE_2D, material.roughness);
         glActiveTexture(GL_TEXTURE3);
         glBindTexture(GL_TEXTURE_2D, material.metallic);
         glActiveTexture(GL_TEXTURE4);
         glBindTexture(GL_TEXTURE_2D, material.ao);
+        bakePass.setMat4("model", model);
+        bakePass.setMat4("projection", projection);
+        bakePass.setMat4("view", view);
 
         glEnable(GL_SCISSOR_TEST);
         glViewport(screenWidth/2, 0, screenWidth/2, screenHeight);
@@ -1078,7 +1090,7 @@ int main()
 
         SDL_GL_SwapWindow(window);
 
-        SDL_PumpEvents();  // make sure we have the latest mouse state.
+        SDL_PumpEvents();  // make sure we have the lascale mouse state.
 
         SDL_GL_GetDrawableSize(window, &screenWidth, &screenHeight);
 

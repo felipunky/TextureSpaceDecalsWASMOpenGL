@@ -1,6 +1,9 @@
 #version 300 es
 precision mediump float;
 
+layout (location = 0) out vec4 DecalTexture;
+layout (location = 1) out vec4 DecalUVs;
+
 uniform mat4 model;                                        
 uniform mat4 view;                                         
 uniform mat4 projection; 
@@ -8,26 +11,9 @@ uniform vec2 iResolution;
 uniform sampler2D iDepth;
 uniform sampler2D iChannel0;
 uniform sampler2D iRender;
-uniform vec3 camPos;
-uniform vec3 camDir;
-uniform float iTest;
+uniform float iScale;
 uniform float iFlip;
 uniform float iBlend;
-
-in vec2 texCoords;
-in vec3 iPosition;
-in vec4 positionCS;
-in vec4 positionVS;
-in vec3 rayPos;
-in vec4 FS_IN_ClipPos;
-
-out vec4 FragColor;
-
-const float FarClip = 200.0;
-
-float near = 0.1; 
-
-#define BIAS 0.001
 
 void main()
 {
@@ -42,10 +28,9 @@ void main()
         discard;
     }
 
-    vec3 viewRay = vec3(uv, depth) * 2. - 1.;//*/vec3(positionVS.xyz) * (FarClip / -positionVS.z);
-    vec3 viewPosition = viewRay;// * depth;
+    vec3 viewRay = vec3(uv, depth) * 2. - 1.;
 
-    vec4 spaceToWorld = inverse(projection) * vec4(viewPosition, 1.);
+    vec4 spaceToWorld = inverse(projection) * vec4(viewRay, 1.);
     vec4 worldToObject = inverse(view) * spaceToWorld;
     worldToObject = inverse(model) * worldToObject;
     worldToObject.xyz /= worldToObject.w;
@@ -55,7 +40,7 @@ void main()
     {
         //discard;
         worldPos *= 0.;
-        FragColor = renderResult;
+        DecalTexture.a = 0.;
     }
 
     if (iFlip == 1.0)
@@ -63,7 +48,9 @@ void main()
         worldPos.y = 1. - worldPos.y;
     }
 
-    vec4 decalResult = texture(iChannel0, (worldPos.xy + 0.5) * iTest);
+    vec2 uvs = (worldPos.xy + 0.5) * iScale;
+    vec4 decalResult = texture(iChannel0, uvs);
 
-    FragColor = vec4(mix(renderResult.rgb, decalResult.rgb, iBlend), renderResult.a);
+    DecalTexture = vec4(mix(renderResult.rgb, decalResult.rgb, iBlend), renderResult.a);
+    DecalUVs = vec4(uvs, 1., 1.);
 }

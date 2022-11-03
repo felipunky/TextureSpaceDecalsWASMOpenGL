@@ -11,11 +11,13 @@ uniform mat4 model;
 uniform mat4 view;                                         
 uniform mat4 projection;                                   
 void main()                                                
-{                           
+{                
+  vec4 p = vec4(VertexTextureCoords * 2. -1., 0., 1.);
   texCoords = VertexTextureCoords;     
-  positions = VertexPosition.xyz;
   mat3 normalMatrix = transpose(inverse(mat3(model)));
   normals = normalMatrix * VertexNormals;                         
-  vec4 worldPos = model * vec4(VertexPosition.xyz, 1.0);         
-  gl_Position = projection * view * worldPos;              
+  vec4 worldPos = model * vec4(VertexPosition.xyz, 1.0);
+  vec4 objPos = projection * view * worldPos;      
+  positions = (objPos).xyz;
+  gl_Position = objPos;              
 }                                                      

@@ -1,8 +1,8 @@
 #version 300 es
 precision mediump float;
 
-layout (location = 0) out vec4 DecalTexture;
-layout (location = 1) out vec4 DecalUVs;
+layout (location = 0) out vec4 FragColor;
+layout (location = 1) out vec4 DecalCoords;
 
 uniform mat4 model;                                        
 uniform mat4 view;                                         
@@ -15,18 +15,20 @@ uniform float iScale;
 uniform float iFlip;
 uniform float iBlend;
 
+//out vec4 FragColor;
+
 void main()
 {
 
-    vec2 uv = gl_FragCoord.xy / iResolution.xy;//gl_FragCoord.xy / iResolution.xy;
+    vec2 uv = gl_FragCoord.xy / iResolution.xy;
     vec4 renderResult = texture(iRender, uv);
 
     float depth = texture(iDepth, uv).r;
 
-    if (gl_FragCoord.z > depth)
-    {
-        discard;
-    }
+    // if (gl_FragCoord.z > depth)
+    // {
+    //     discard;
+    // }
 
     vec3 viewRay = vec3(uv, depth) * 2. - 1.;
 
@@ -35,12 +37,13 @@ void main()
     worldToObject = inverse(model) * worldToObject;
     worldToObject.xyz /= worldToObject.w;
     vec3 worldPos = worldToObject.xyz;
+    FragColor.a = 1.0;
 
-    if (worldPos.x < -1.0 || worldPos.x > 1.0 || worldPos.y < -1.0 || worldPos.y > 1.0 || worldPos.z < -1.0 || worldPos.z > 1.0)
+    if (worldPos.x < -1.0 || worldPos.x > 1.0 || worldPos.y < -1.0 || worldPos.y > 1.0 || worldPos.z < -1.0 || worldPos.z > 1.0 || gl_FragCoord.z > depth)
     {
         //discard;
         worldPos *= 0.;
-        DecalTexture.a = 0.;
+        FragColor.a = 0.;
     }
 
     if (iFlip == 1.0)
@@ -49,8 +52,10 @@ void main()
     }
 
     vec2 uvs = (worldPos.xy + 0.5) * iScale;
-    vec4 decalResult = texture(iChannel0, uvs);
 
-    DecalTexture = vec4(mix(renderResult.rgb, decalResult.rgb, iBlend), renderResult.a);
-    DecalUVs = vec4(uvs, 1., 1.);
+    DecalCoords = vec4(uvs, 1.0, 1.0);
+
+    vec4 decalResult = texture(iChannel0, uvs) * FragColor.a;
+
+    FragColor = vec4(mix(renderResult.rgb, decalResult.rgb, iBlend), renderResult.a);
 }

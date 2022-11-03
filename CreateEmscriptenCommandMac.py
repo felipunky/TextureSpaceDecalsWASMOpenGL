@@ -18,6 +18,7 @@ webGLVersion = "-s MIN_WEBGL_VERSION=2 "
 webGLVersion += "-s MAX_WEBGL_VERSION=2 "
 gladPath = "/Users/felipe/Documents/Graphics/Libraries/"
 imGuizmoPath = "/Users/felipe/Documents/GitHub/ImGuizmo/ImGuizmo/"
+nanoRTPath = "/Users/felipe/Documents/Graphics/nanort/ "
 rendererClass = ""
 if optimize:
     optimizationLevel = "-O2 "
@@ -46,6 +47,7 @@ emscriptenCommand = "emcc " + \
                     "-I" + brewPath + " " + \
                     "-I" + stbPath + " " + \
                     "-I" + tinyObjLoaderPath + " " + \
+                    "-I" + nanoRTPath + \
                     "-v --embed-file " + shaderPath + " " + \
                     "-v --preload-file " + assetsPath + " " + \
                     "-s FULL_ES3=1 " + \

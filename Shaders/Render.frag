@@ -7,5 +7,6 @@ out vec4 FragColor;
 
 void main()
 {    
-    FragColor = texture(iChannel0, texCoords);
+    vec4 tex = texture(iChannel0, texCoords);
+    FragColor = vec4(pow(tex.rgb, vec3(2.2)), tex.a);
 }

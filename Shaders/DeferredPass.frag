@@ -12,6 +12,7 @@ uniform sampler2D gAO;
 out vec4 FragColor;
 
 uniform vec3 viewPos;
+uniform float iTime;
 
 const float PI = 3.14159265359;
 
@@ -88,12 +89,12 @@ void main()
     for(int i = 0; i < 1; ++i) 
     {
         // calculate per-light radiance
-        vec3 light = vec3(150.0, 150.0, 150.0);
+        vec3 light = vec3(sin(iTime), 8.0, cos(iTime));
         vec3 L = normalize(light - FragPos);//normalize(lightPositions[i] - WorldPos);
         vec3 H = normalize(V + L);
         float distance = length(light - FragPos);
         float attenuation = 1.0 / (distance * distance);
-        vec3 radiance = vec3(.8, .3, .3);//lightColors[i] * attenuation;
+        vec3 radiance = vec3(300);//lightColors[i] * attenuation;
 
         // Cook-Torrance BRDF
         float NDF = DistributionGGX(N, H, roughness);   

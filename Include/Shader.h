@@ -15,11 +15,12 @@
 #define GL_GLEXT_PROTOTYPES 1
 
 #define GLM_ENABLE_EXPERIMENTAL
+#define GLM_FORCE_SWIZZLE
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/hash.hpp>
-
+#include <glm/gtx/string_cast.hpp>
 
 #define STB_IMAGE_IMPLEMENTATION    
 #include "stb_image.h"

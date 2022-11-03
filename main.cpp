@@ -20,10 +20,15 @@
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"
 
+#include "nanort.h"
+
 #if 0
 #define glGenVertexArrays glGenVertexArraysOES
 #define glBindVertexArray glBindVertexArrayOES
 #endif
+
+#define PROJECTOR_DISTANCE 10.0f
+#define FAR_PLANE 200.0F
 
 uint8_t* decalImageBuffer;
 uint16_t widthDecal = 0, heightDecal = 0, clicked = 0;
@@ -71,23 +76,34 @@ bool useWindow = false;
 float camDistance = 1.f;
 static ImGuizmo::OPERATION mCurrentGizmoOperation(ImGuizmo::TRANSLATE);
 
-const int WIDTH = 1200,
-          HEIGHT = 600;
+const int WIDTH  = 600,
+          HEIGHT = 400;
 
 // an example of something we will control from the javascript side
 
 std::function<void()> loop;
 void main_loop() { loop(); }
 
-std::vector<glm::vec3> modelDataVertices;
+std::vector<glm::vec3> modelDataVertices,
+                       meshRawVertices;
 std::vector<glm::vec3> modelDataNormals;
 std::vector<glm::vec2> modelDataTextureCoordinates;
 std::vector<tinyobj::material_t> modelDataMaterial;
 std::map<std::string, GLuint> modelDataTextures;
-std::vector<unsigned int> indexes;
+std::vector<unsigned int> indexes,
+                          meshRawIndexes;
 glm::vec3 bboxMin = glm::vec3(1e+5);
 glm::vec3 bboxMax = glm::vec3(-1e+5);
 glm::vec3 centroid;
+
+// Projector
+glm::vec3 projectorPos;
+glm::vec3 projectorDir;
+glm::mat4 projectorView;
+glm::mat4 projectorProjection;
+glm::mat4 decalProjector;
+float     projectorSize     = 10.0f;
+float     projectorRotation = 0.0f;
 
 int lastUsing = 0;
 
@@ -101,6 +117,17 @@ struct Material
 };
 
 Material material;
+
+struct Mesh
+{
+    size_t NumOfFaces;
+    size_t NumOfVertices;
+    float* Vertices;
+    float* Normals;
+    unsigned int* Faces;
+};
+
+Mesh mesh;
 
 unsigned int quadVAO = 0;
 unsigned int quadVBO;
@@ -398,6 +425,12 @@ void ObjLoader(Shader* shader)
         }
     }
 
+    mesh.NumOfFaces    = indexes.size() / 3;
+    mesh.NumOfVertices = modelDataVertices.size();
+    mesh.Vertices      = &modelDataVertices[0][0];
+    mesh.Normals       = &modelDataNormals[0][0];
+    mesh.Faces         = &indexes[0];
+
     // shader->createTexture(&(material.baseColor), "Assets/Textures/rustediron1-alt2-Unreal-Engine/rustediron2_basecolor.png", "BaseColor", 0);
     // shader->createTexture(&(material.normal), "Assets/Textures/rustediron1-alt2-Unreal-Engine/rustediron2_normal.png", "Normal", 1);
     // shader->createTexture(&(material.roughness), "Assets/Textures/rustediron1-alt2-Unreal-Engine/rustediron2_roughness.png", "Roughness", 2);
@@ -500,23 +533,29 @@ int main()
     /**
      * Start Shader Setup
      */
-    Shader geometryPass = Shader("Shaders/GBuffer.vert", "Shaders/GBuffer.frag");   
-    Shader deferredPass = Shader("Shaders/DeferredPass.vert", "Shaders/DeferredPass.frag");
-    Shader decalsPass   = Shader("Shaders/Decals.vert", "Shaders/Decals.frag");
-    Shader renderTarget = Shader("Shaders/Render.vert", "Shaders/Render.frag");
-    Shader renderDecal  = Shader("Shaders/RenderDecal.vert", "Shaders/RenderDecal.frag");
-    Shader bakePass     = Shader("Shaders/Baker.vert", "Shaders/Baker.frag");
+    Shader geometryPass  = Shader("Shaders/GBuffer.vert",      "Shaders/GBuffer.frag");   
+    Shader deferredPass  = Shader("Shaders/DeferredPass.vert", "Shaders/DeferredPass.frag");
+    Shader renderTarget  = Shader("Shaders/Render.vert",       "Shaders/Render.frag");
+    Shader hitPosition   = Shader("Shaders/HitPosition.vert",  "Shaders/HitPosition.frag");
+    // Shader decalsPass    = Shader("Shaders/Decals.vert",       "Shaders/Decals.frag");
+    // Shader renderDecal   = Shader("Shaders/RenderDecal.vert",  "Shaders/RenderDecal.frag");
+    // Shader bakePass      = Shader("Shaders/Baker.vert",        "Shaders/Baker.frag");
+    // Shader integratePass = Shader("Shaders/Integrate.vert",    "Shaders/Decals.frag");
     
     renderTarget.use();
     renderTarget.setInt("iChannel0", 0);
 
-    renderDecal.use();
-    renderDecal.setInt("iChannel1", 0);
-    renderDecal.setInt("iChannel2", 1);
+    // renderDecal.use();
+    // renderDecal.setInt("iChannel1", 0);
+    // renderDecal.setInt("iChannel2", 1);
     
-    decalsPass.use();
-    decalsPass.setInt("iDepth", 0);
-    decalsPass.setInt("iRender", 2);
+    // decalsPass.use();
+    // decalsPass.setInt("iDepth", 0);
+    // decalsPass.setInt("iRender", 2);
+
+    // integratePass.use();
+    // integratePass.setInt("iDepth", 0);
+    // integratePass.setInt("iRender", 2);
 
     unsigned int gBuffer;
     glGenFramebuffers(1, &gBuffer);
@@ -532,7 +571,7 @@ int main()
      // create and attach depth buffer (renderbuffer)
     glGenTextures(1, &rboDepth);
     glBindTexture(GL_TEXTURE_2D, rboDepth);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, WIDTH/2, HEIGHT, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, WIDTH, HEIGHT, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
@@ -542,7 +581,7 @@ int main()
     // - position color buffer
     glGenTextures(1, &gPosition);
     glBindTexture(GL_TEXTURE_2D, gPosition);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, WIDTH/2, HEIGHT, 0, GL_RGBA, GL_FLOAT, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, WIDTH, HEIGHT, 0, GL_RGBA, GL_FLOAT, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gPosition, 0);
@@ -550,7 +589,7 @@ int main()
     // - normal color buffer
     glGenTextures(1, &gNormal);
     glBindTexture(GL_TEXTURE_2D, gNormal);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, WIDTH/2, HEIGHT, 0, GL_RGBA, GL_FLOAT, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, WIDTH, HEIGHT, 0, GL_RGBA, GL_FLOAT, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, gNormal, 0);
@@ -558,7 +597,7 @@ int main()
     // - color buffer
     glGenTextures(1, &gAlbedo);
     glBindTexture(GL_TEXTURE_2D, gAlbedo);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, WIDTH/2, HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, WIDTH, HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, gAlbedo, 0);
@@ -566,7 +605,7 @@ int main()
     // - metallic buffer
     glGenTextures(1, &gMetallic);
     glBindTexture(GL_TEXTURE_2D, gMetallic);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, WIDTH/2, HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, WIDTH, HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_TEXTURE_2D, gMetallic, 0);
@@ -574,7 +613,7 @@ int main()
     // - roughness buffer
     glGenTextures(1, &gRoughness);
     glBindTexture(GL_TEXTURE_2D, gRoughness);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, WIDTH/2, HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, WIDTH, HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT4, GL_TEXTURE_2D, gRoughness, 0);
@@ -582,7 +621,7 @@ int main()
     // - AO buffer
     glGenTextures(1, &gAO);
     glBindTexture(GL_TEXTURE_2D, gAO);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, WIDTH/2, HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, WIDTH, HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT5, GL_TEXTURE_2D, gAO, 0);
@@ -591,49 +630,65 @@ int main()
     unsigned int attachments[6] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3, GL_COLOR_ATTACHMENT4, GL_COLOR_ATTACHMENT5 };
     glDrawBuffers(6, attachments);
 
-    // Render to texture.
-    unsigned int fbo;
-    glGenFramebuffers(1, &fbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    // // Render to texture.
+    // unsigned int fbo;
+    // glGenFramebuffers(1, &fbo);
+    // glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 
-    // - Screen space buffer
-    unsigned int render;
-    glGenTextures(1, &render);
-    glBindTexture(GL_TEXTURE_2D, render);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, WIDTH/2, HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, render, 0);
+    // // - Screen space buffer
+    // unsigned int render;
+    // glGenTextures(1, &render);
+    // glBindTexture(GL_TEXTURE_2D, render);
+    // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, WIDTH, HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    // glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, render, 0);
 
-    // Set the list of draw buffers.
-    unsigned int drawBuffers[1] = {GL_COLOR_ATTACHMENT0};
-    glDrawBuffers(1, drawBuffers); // "1" is the size of DrawBuffers
+    // // Set the list of draw buffers.
+    // unsigned int drawBuffers[1] = {GL_COLOR_ATTACHMENT0};
+    // glDrawBuffers(1, drawBuffers); // "1" is the size of DrawBuffers
 
-    // Render to texture decals.
-    unsigned int fboDecal;
-    glGenFramebuffers(1, &fboDecal);
-    glBindFramebuffer(GL_FRAMEBUFFER, fboDecal);
+    // // Render to texture decals.
+    // unsigned int fboDecal;
+    // glGenFramebuffers(1, &fboDecal);
+    // glBindFramebuffer(GL_FRAMEBUFFER, fboDecal);
 
-    // - Screen space buffer
-    unsigned int renderDecalTex;
-    glGenTextures(1, &renderDecalTex);
-    glBindTexture(GL_TEXTURE_2D, renderDecalTex);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, WIDTH/2, HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderDecalTex, 0);
+    // // - Screen space buffer
+    // unsigned int renderDecalTex;
+    // glGenTextures(1, &renderDecalTex);
+    // glBindTexture(GL_TEXTURE_2D, renderDecalTex);
+    // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, WIDTH, HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    // glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderDecalTex, 0);
 
-    unsigned int decalUVTex;
-    glGenTextures(1, &decalUVTex);
-    glBindTexture(GL_TEXTURE_2D, decalUVTex);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, WIDTH/2, HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, decalUVTex, 0);
+    // unsigned int decalUVTex;
+    // glGenTextures(1, &decalUVTex);
+    // glBindTexture(GL_TEXTURE_2D, decalUVTex);
+    // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, WIDTH, HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    // glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, decalUVTex, 0);
 
-    // Set the list of draw buffers.
-    unsigned int drawDecal[2] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
-    glDrawBuffers(2, drawDecal); // "1" is the size of DrawBuffers
+    // // Set the list of draw buffers.
+    // unsigned int drawDecal[2] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
+    // glDrawBuffers(2, drawDecal); // "1" is the size of DrawBuffers
+
+    // unsigned int fboUnwrap;
+    // glGenFramebuffers(1, &fboUnwrap);
+    // glBindFramebuffer(GL_FRAMEBUFFER, fboUnwrap);
+
+    // // - Screen space buffer
+    // unsigned int renderUnwrap;
+    // glGenTextures(1, &renderUnwrap);
+    // glBindTexture(GL_TEXTURE_2D, renderUnwrap);
+    // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, WIDTH, HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    // glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderUnwrap, 0);
+
+    // unsigned int drawUnwrap[1] = {GL_COLOR_ATTACHMENT0};
+    // glDrawBuffers(1, drawUnwrap);
 
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
         std::cout << "Framebuffer not complete!" << std::endl;
@@ -647,8 +702,14 @@ int main()
     deferredPass.setInt("gRoughness", 4);
     deferredPass.setInt("gAO", 5);
 
-    bakePass.use();
-    ObjLoader(&bakePass);
+    // bakePass.use();
+    // ObjLoader(&bakePass);
+    // bakePass.setInt("gPosition", 0);
+    // bakePass.setInt("gNormal", 1);
+    // bakePass.setInt("gAlbedo", 2);
+    // bakePass.setInt("gMetallic", 3);
+    // bakePass.setInt("gRoughness", 4);
+    // bakePass.setInt("gAO", 5);
 
     /**
      * End Shader Setup
@@ -711,7 +772,6 @@ int main()
     float blend = 0.0f;
 	bool insideImGui = false;
     
-
 	// Create the camera (eye).
 	glm::mat4 view = glm::mat4(1.0f);
 	glm::mat4 model = glm::mat4(1.0f);
@@ -720,10 +780,12 @@ int main()
 
     float iTime = 0.0f;
 
-    unsigned int decalTexture = -1;
+    unsigned int decalTexture = -1;//, decalTextureO = -1;
+
     //decalsPass.createTextureFromFile(&decalTexture, decalImageBuffer, widthDecal, heightDecal, "iChannel0", 1);
     //decalsPass.createTextureFromFile(&decalTexture, decalImageBuffer, widthDecal, heightDecal, "iChannel0", 1);
-    decalsPass.createTexture(&decalTexture, "Assets/Textures/Batman.png", "iChannel0", 1);
+    //decalsPass.createTexture(&decalTexture, "Assets/Textures/Batman.png", "iChannel0", 1);
+    //integratePass.createTexture(&decalTextureO, "Assets/Textures/Batman.png", "iChannel0", 1);
     //std::cout << "Decal Texture binding: " << decalTexture << std::endl;
 
     int flip = 0;
@@ -732,53 +794,86 @@ int main()
 
     int halfWidth = WIDTH/2, halfHeight = HEIGHT/2;
 
+    nanort::BVHBuildOptions<float> build_options;  // Use default option
+    build_options.cache_bbox = false;
+
+    printf("  BVH build option:\n");
+    printf("    # of leaf primitives: %d\n", build_options.min_leaf_primitives);
+    printf("    SAH binsize         : %d\n", build_options.bin_size);
+
+    //std::cout << "Vertices size: " << (sizeof(vertices) / sizeof(vertices[0])) << std::endl;
+
+    nanort::TriangleMesh<float> triangle_mesh(mesh.Vertices, mesh.Faces, sizeof(float) * 3);
+    nanort::TriangleSAHPred<float> triangle_pred(mesh.Vertices, mesh.Faces, sizeof(float) * 3);
+
+    printf("num_triangles = %zu\n", mesh.NumOfFaces);
+    printf("faces = %p\n", mesh.Faces);
+
+    nanort::BVHAccel<float> accel;
+    bool ret = accel.Build(mesh.NumOfFaces, triangle_mesh, triangle_pred, build_options);
+    assert(ret);
+
+    nanort::BVHBuildStatistics stats = accel.GetStatistics();
+
+    printf("  BVH statistics:\n");
+    printf("    # of leaf   nodes: %d\n", stats.num_leaf_nodes);
+    printf("    # of branch nodes: %d\n", stats.num_branch_nodes);
+    printf("  Max tree depth     : %d\n", stats.max_tree_depth);
+    float bmin[3], bmax[3];
+    accel.BoundingBox(bmin, bmax);
+    printf("  Bmin               : %f, %f, %f\n", bmin[0], bmin[1], bmin[2]);
+    printf("  Bmax               : %f, %f, %f\n", bmax[0], bmax[1], bmax[2]);
+
+    glm::vec3 hitPos = glm::vec3(0.0, 0.0, 0.0);
+    glm::vec3 hitNor = glm::vec3(1.0, 1.0, 1.0);
+
     loop = [&]
     {
 
-        if (decalImageBuffer)//decalImageBuffer && clicked == 1)
-        {
-            //decalsPass.createTexture(&decalTexture, "Assets/Textures/WatchMen.jpeg", "iChannel0", 1);
-            //decalsPass.createTextureFromFile(&decalTexture, decalImageBuffer, widthDecal, heightDecal, "iChannel0", 1);
-            flip = 1;
-            glGenTextures(1, &decalTexture);
-            glBindTexture(GL_TEXTURE_2D, decalTexture);
+        // if (decalImageBuffer)//decalImageBuffer && clicked == 1)
+        // {
+        //     //decalsPass.createTexture(&decalTexture, "Assets/Textures/WatchMen.jpeg", "iChannel0", 1);
+        //     //decalsPass.createTextureFromFile(&decalTexture, decalImageBuffer, widthDecal, heightDecal, "iChannel0", 1);
+        //     flip = 1;
+        //     glGenTextures(1, &decalTexture);
+        //     glBindTexture(GL_TEXTURE_2D, decalTexture);
 
-            // In an ideal world this should be exposed as input params to the function.
-            // Texture wrapping params.
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-            // Texture filtering params.
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        //     // In an ideal world this should be exposed as input params to the function.
+        //     // Texture wrapping params.
+        //     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        //     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        //     // Texture filtering params.
+        //     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        //     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-            // Get the texture format automatically.
-            auto format = GL_RGBA;
-            if (decalImageBuffer)
-            {
-                std::cout << "Buffer not zero" << std::endl;
-                glTexImage2D(GL_TEXTURE_2D, 0, format, widthDecal, heightDecal, 0, format, GL_UNSIGNED_BYTE, decalImageBuffer);
-                glGenerateMipmap(GL_TEXTURE_2D);
-            }
-            else
-            {
-                throw std::runtime_error("Failed to load texture!");
-            }
-            // Clear the data.
-            free(decalImageBuffer);
-            //buffer.clear();
+        //     // Get the texture format automatically.
+        //     auto format = GL_RGBA;
+        //     if (decalImageBuffer)
+        //     {
+        //         std::cout << "Buffer not zero" << std::endl;
+        //         glTexImage2D(GL_TEXTURE_2D, 0, format, widthDecal, heightDecal, 0, format, GL_UNSIGNED_BYTE, decalImageBuffer);
+        //         glGenerateMipmap(GL_TEXTURE_2D);
+        //     }
+        //     else
+        //     {
+        //         throw std::runtime_error("Failed to load texture!");
+        //     }
+        //     // Clear the data.
+        //     free(decalImageBuffer);
+        //     //buffer.clear();
 
-            // Bind the uniform sampler.
-            decalsPass.use();
-            decalsPass.setInt("iChannel0", 1);
-            // //this->setInt(samplerName, uniform);
-        }
-        /*else
-        {
-            decalsPass.createTexture(&decalTexture, "Assets/Textures/WatchMen.jpeg", "iChannel0", 1);
-            //decalsPass.createTextureFromFile(&decalTexture, decalImageBuffer, widthDecal, heightDecal, "iChannel0", 1);
-        }*/
+        //     // Bind the uniform sampler.
+        //     decalsPass.use();
+        //     decalsPass.setInt("iChannel0", 1);
+        //     // //this->setInt(samplerName, uniform);
+        // }
+        // /*else
+        // {
+        //     decalsPass.createTexture(&decalTexture, "Assets/Textures/WatchMen.jpeg", "iChannel0", 1);
+        //     //decalsPass.createTextureFromFile(&decalTexture, decalImageBuffer, widthDecal, heightDecal, "iChannel0", 1);
+        // }*/
 
-        glEnable(GL_DEPTH_TEST);
+        // glEnable(GL_DEPTH_TEST);
         /**
          * Start ImGui
          */	        
@@ -830,7 +925,16 @@ int main()
             }
         }
 
-        glm::vec2 widthHeight = glm::vec2(screenWidth/2, screenHeight);
+        view = glm::lookAt(camPos, camPos + camFront, camUp);
+
+        glm::vec2 widthHeight = glm::vec2(screenWidth, screenHeight);
+
+        // No need to compute this every frame as the FOV stays always the same.
+        float halfWidth = widthHeight.x * .5;
+		glm::mat4 projection = glm::perspective( glm::radians( 45.0f ), widthHeight.x / widthHeight.y,
+												 0.1f, 200.0f
+												);
+
         glm::vec3 mouse;
         if (!insideImGui)
 		{
@@ -879,14 +983,62 @@ int main()
 			front.y = sin(glm::radians(pitch));
 			front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
 			camFront = glm::normalize(front);
+
+            if ((buttons & SDL_BUTTON_RMASK) != 0)
+            {
+                std::cout << "Right button pressed!" << std::endl;
+                glm::vec4 NDCPos      = glm::vec4((2.0f * float(mousePositionX)) / widthHeight.x - 1.0f, 
+                                                   1.0f - (2.0f * float(mousePositionY)) / widthHeight.y, 
+                                                   1.0f, 
+                                                   1.0f);
+                glm::vec4 viewCoords  = glm::inverse(projection) * NDCPos;
+                glm::vec4 worldCoords = glm::inverse(view) * glm::vec4(viewCoords.x, viewCoords.y, -1.0f, 0.0f);
+
+                glm::vec3 rayDir = glm::normalize(glm::vec3(worldCoords));
+
+                nanort::Ray<float> ray;
+                ray.org[0] = camPos.x;
+                ray.org[1] = camPos.y;
+                ray.org[2] = camPos.z;
+
+                ray.dir[0] = rayDir.x;
+                ray.dir[1] = rayDir.y;
+                ray.dir[2] = rayDir.z;
+
+                float kFar = 1.0e+30f;
+                ray.min_t = 0.0f;
+                ray.max_t = kFar;
+
+                nanort::TriangleIntersector<> triangle_intersector(mesh.Vertices, mesh.Faces, sizeof(float) * 3);
+                nanort::TriangleIntersection<> isect;
+                bool hit = accel.Traverse(ray, triangle_intersector, &isect);
+                if (hit)
+                {
+                    hitPos = camPos + rayDir * isect.t;
+                    
+                    unsigned int fid = isect.prim_id;
+                    hitNor.x = mesh.Normals[3 * fid + 0];
+                    hitNor.y = mesh.Normals[3 * fid + 1];
+                    hitNor.z = mesh.Normals[3 * fid + 2];
+
+                    projectorPos = hitPos + hitNor * PROJECTOR_DISTANCE;
+                    projectorDir = -hitNor;
+
+                    float ratio = heightDecal / widthDecal;
+                    float proportionateHeight = projectorSize * ratio;
+
+                    glm::vec3 axis = glm::vec3(0.0f, 1.0f, 0.0f);
+                    projectorView = glm::lookAt(projectorPos, hitPos, axis);
+                    projectorProjection = glm::ortho(-projectorSize, projectorSize, -proportionateHeight, proportionateHeight, 0.1f, FAR_PLANE);
+
+                    decalProjector = projectorProjection * projectorView;
+
+                    printf("Hit Point: %s\n", glm::to_string(hitPos).c_str());
+                    printf("Hit Normal: %s\n", glm::to_string(hitNor).c_str());
+                }
+            }
+
 		}
-
-        view = glm::lookAt( camPos, camPos + camFront, camUp );
-
-        // No need to compute this every frame as the FOV stays always the same.
-		glm::mat4 projection = glm::perspective( glm::radians( 45.0f ), widthHeight.x / widthHeight.y,
-												 0.1f, 200.0f
-												);
 
         // Start the Dear ImGui frame
         ImGui_ImplOpenGL3_NewFrame();
@@ -895,8 +1047,8 @@ int main()
         ImGuizmo::BeginFrame();
 
         ImGui::Begin("Graphical User Interface");   // Pass a pointer to our bool variable (the window will have a closing button that will clear the bool when clicked)
-        auto printTime = (std::to_string(deltaTime * 1000.0f) + " ms.\n").c_str();
-		ImGui::Text(printTime);
+        std::string printTime = std::to_string(deltaTime * 1000.0f) + " ms.\n";
+		ImGui::Text(printTime.c_str());
         ImGui::SliderFloat("Test", &scale, 1.0f, 100.0f);
         ImGui::SliderFloat("Blend", &blend, 0.0f, 1.0f);
         if (ImGui::Button("Click me")) 
@@ -956,9 +1108,9 @@ int main()
         glActiveTexture(GL_TEXTURE4);
         glBindTexture(GL_TEXTURE_2D, material.ao);
 
-        glEnable(GL_SCISSOR_TEST);
-        glViewport(0, 0, screenWidth/2, screenHeight);
-        glScissor(0, 0, screenWidth/2, screenHeight);
+        // glEnable(GL_SCISSOR_TEST);
+        // glViewport(0, 0, screenWidth, screenHeight);
+        // glScissor(0, 0, screenWidth, screenHeight);
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -969,7 +1121,7 @@ int main()
 
         // 2. lighting pass: calculate lighting by iterating over a screen filled quad pixel-by-pixel using the gbuffer's content.
         // -----------------------------------------------------------------------------------------------------------------------
-        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
         deferredPass.use();
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, gPosition);
@@ -983,11 +1135,12 @@ int main()
         glBindTexture(GL_TEXTURE_2D, gAO);
 
         deferredPass.setVec3("viewPos", camPos);
+        deferredPass.setFloat("iTime", iTime);
         // finally render quad
 
-        glEnable(GL_SCISSOR_TEST);
-        glViewport(0, 0, screenWidth/2, screenHeight);
-        glScissor(0, 0, screenWidth/2, screenHeight);
+        // glEnable(GL_SCISSOR_TEST);
+        // glViewport(0, 0, screenWidth, screenHeight);
+        // glScissor(0, 0, screenWidth, screenHeight);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         renderQuad();
@@ -998,15 +1151,29 @@ int main()
         // the internal formats are implementation defined. This works on all of my systems, but if it doesn't on yours you'll likely have to write to the 		
         // depth buffer in another shader stage (or somehow see to match the default framebuffer's internal format with the FBO's internal format).
         glBlitFramebuffer(0, 0, WIDTH, HEIGHT, 0, 0, WIDTH, HEIGHT, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+        
+        glm::mat4 hitPositionModel = glm::mat4(1);
+        hitPositionModel = glm::translate(hitPositionModel, hitPos);
+        hitPositionModel = glm::scale(hitPositionModel, glm::vec3(0.05));
 
-        renderTarget.use();
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        glEnable(GL_DEPTH_TEST);
+
+        hitPosition.use();
+        hitPosition.setMat4("model", hitPositionModel);
+        hitPosition.setMat4("projection", projection);
+        hitPosition.setMat4("view", view);
+        renderCube();
+
+        /*renderTarget.use();
         glDisable(GL_DEPTH_TEST);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, render);
 
-        glEnable(GL_SCISSOR_TEST);
-        glViewport(0, 0, screenWidth/2, screenHeight);
-        glScissor(0, 0, screenWidth/2, screenHeight);
+        // glEnable(GL_SCISSOR_TEST);
+        // glViewport(0, 0, screenWidth, screenHeight);
+        // glScissor(0, 0, screenWidth, screenHeight);
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -1031,8 +1198,8 @@ int main()
         glBindTexture(GL_TEXTURE_2D, render);
 
         glEnable(GL_SCISSOR_TEST);
-        glViewport(0, 0, screenWidth/2, screenHeight);
-        glScissor(0, 0, screenWidth/2, screenHeight);
+        glViewport(0, 0, screenWidth, screenHeight);
+        glScissor(0, 0, screenWidth, screenHeight);
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -1042,6 +1209,7 @@ int main()
         glBindVertexArray(0);
 
         renderDecal.use();
+        renderDecal.setVec2("iResolution", widthHeight);
         glDisable(GL_DEPTH_TEST);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, renderDecalTex);
@@ -1049,41 +1217,78 @@ int main()
         glBindTexture(GL_TEXTURE_2D, render);
 
         glEnable(GL_SCISSOR_TEST);
-        glViewport(0, 0, screenWidth/2, screenHeight);
-        glScissor(0, 0, screenWidth/2, screenHeight);
+        glViewport(0, 0, halfWidth, screenHeight);
+        glScissor(0, 0, halfWidth, screenHeight);
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         renderQuad();
 
+        glEnable(GL_DEPTH_TEST);
+        glDepthMask(true);
+        glCullFace(GL_BACK);
         // Draw texture baker.
+        glBindFramebuffer(GL_FRAMEBUFFER, fboUnwrap);
         bakePass.use();
+        bakePass.setMat4("model", model);
+        bakePass.setMat4("projection", projection);
+        bakePass.setMat4("view", view);
         glBindVertexArray(VAO); 
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, renderDecalTex);//material.baseColor);
+        glBindTexture(GL_TEXTURE_2D, material.baseColor);
         glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, decalUVTex);// material.normal);
+        glBindTexture(GL_TEXTURE_2D, material.normal);
         glActiveTexture(GL_TEXTURE2);
         glBindTexture(GL_TEXTURE_2D, material.roughness);
         glActiveTexture(GL_TEXTURE3);
         glBindTexture(GL_TEXTURE_2D, material.metallic);
         glActiveTexture(GL_TEXTURE4);
         glBindTexture(GL_TEXTURE_2D, material.ao);
-        bakePass.setMat4("model", model);
-        bakePass.setMat4("projection", projection);
-        bakePass.setMat4("view", view);
 
         glEnable(GL_SCISSOR_TEST);
-        glViewport(screenWidth/2, 0, screenWidth/2, screenHeight);
-        glScissor(screenWidth/2, 0, screenWidth/2, screenHeight);
+        glViewport(0, 0, screenWidth, screenHeight);
+        glScissor(0, 0, screenWidth, screenHeight);
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); 
         glDrawElements(GL_TRIANGLES, indexes.size(), GL_UNSIGNED_INT, 0);
 
-        //glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glBindVertexArray(0);
 
-        glEnable(GL_DEPTH_TEST);
+        glDisable(GL_DEPTH_TEST);
+        // integratePass.use();
+        // integratePass.setVec2("iResolution", widthHeight);
+        // integratePass.setMat4("model", model);
+        // integratePass.setMat4("projection", projection);
+        // integratePass.setMat4("view", view);
+        // glActiveTexture(GL_TEXTURE0);
+        // glBindTexture(GL_TEXTURE_2D, renderUnwrap);
+        // glActiveTexture(GL_TEXTURE1);
+        // glBindTexture(GL_TEXTURE_2D, decalUVTex);
+        bakePass.use();
+        bakePass.setMat4("model", model);
+        bakePass.setMat4("projection", projection);
+        bakePass.setMat4("view", view);
+        bakePass.setVec2("iResolution", widthHeight);
+        bakePass.setFloat("iScale", scale);
+        bakePass.setFloat("iFlip", flip);
+        bakePass.setFloat("iBlend", blend);
+
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, rboDepth);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, decalTexture);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, render);
+
+        glEnable(GL_SCISSOR_TEST);
+        glViewport(halfWidth, 0, halfWidth, screenHeight);
+        glScissor(halfWidth, 0, halfWidth, screenHeight);
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); 
+        renderQuad();*/
+
+        //glEnable(GL_DEPTH_TEST);
 
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -1103,6 +1308,10 @@ int main()
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL2_Shutdown();
     ImGui::DestroyContext();
+    indexes.clear();
+    delete[] mesh.Vertices;
+    delete[] mesh.Normals;
+    delete[] mesh.Faces;
 
     return EXIT_SUCCESS;
 }

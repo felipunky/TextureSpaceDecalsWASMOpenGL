@@ -32,6 +32,8 @@ class Shader
 {
 public:
 	unsigned int ID;
+	int Width,
+		Height;
 	// constructor generates the shader on the fly
 	// ------------------------------------------------------------------------
 	Shader()
@@ -177,13 +179,10 @@ public:
 		stbi_set_flip_vertically_on_load(true); // Yes... I am talking to you Vulkan!
 
 		unsigned char* data = stbi_load(fileName.c_str(), &width, &height, &channels, 0);
+		Width  = width;
+		Height = height;
 
 		std::cout << "Original texture data: " << +data[0] << std::endl;
-
-		// for (int i = 0; i < (sizeof(data) / sizeof(data[0])); ++i)
-		// {
-		// 	std::cout << "Tex data: " << +data[i] << std::endl;
- 		// }
 
 		// Get the texture format automatically.
 		auto format = GL_RGB;

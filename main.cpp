@@ -27,11 +27,11 @@
 #define glBindVertexArray glBindVertexArrayOES
 #endif
 
-#define PROJECTOR_DISTANCE 10.0f
-#define FAR_PLANE 200.0F
+#define PROJECTOR_DISTANCE 50.0f
+#define FAR_PLANE 1000.0F
 
 uint8_t* decalImageBuffer;
-uint16_t widthDecal = 0, heightDecal = 0, clicked = 0;
+uint16_t widthDecal = 4509u, heightDecal = 2798u, clicked = 0;
 
 uint8_t* loadArray(uint8_t* buf, int bufSize)
 {
@@ -62,12 +62,12 @@ extern "C"
     void passSize (uint16_t* buf, int bufSize)
     {
         std::cout << "Reading decal image size!" << std::endl;
-        widthDecal = buf[0];
+        widthDecal  = buf[0];
         heightDecal = buf[1];
-        clicked = buf[2];
-        std::cout << "Decal Width: " << +widthDecal << std::endl;
+        clicked     = buf[2];
+        std::cout << "Decal Width: "  << +widthDecal  << std::endl;
         std::cout << "Decal Height: " << +heightDecal << std::endl;
-        std::cout << "Clicked :" << +clicked << std::endl;
+        std::cout << "Clicked :"      << +clicked     << std::endl;
         free(buf);
     }
 }
@@ -102,7 +102,7 @@ glm::vec3 projectorDir;
 glm::mat4 projectorView;
 glm::mat4 projectorProjection;
 glm::mat4 decalProjector;
-float     projectorSize     = 10.0f;
+float     projectorSize     = 0.1f;
 float     projectorRotation = 0.0f;
 
 int lastUsing = 0;
@@ -128,6 +128,79 @@ struct Mesh
 };
 
 Mesh mesh;
+
+const glm::vec4 kFrustumCorners[] = {
+    glm::vec4(-1.0f, -1.0f, 1.0f, 1.0f),  // Far-Bottom-Left
+    glm::vec4(-1.0f, 1.0f, 1.0f, 1.0f),   // Far-Top-Left
+    glm::vec4(1.0f, 1.0f, 1.0f, 1.0f),    // Far-Top-Right
+    glm::vec4(1.0f, -1.0f, 1.0f, 1.0f),   // Far-Bottom-Right
+    glm::vec4(-1.0f, -1.0f, -1.0f, 1.0f), // Near-Bottom-Left
+    glm::vec4(-1.0f, 1.0f, -1.0f, 1.0f),  // Near-Top-Left
+    glm::vec4(1.0f, 1.0f, -1.0f, 1.0f),   // Near-Top-Right
+    glm::vec4(1.0f, -1.0f, -1.0f, 1.0f)   // Near-Bottom-Right
+};
+
+void renderLineStrip(glm::vec3* vertices, const int& count)
+{
+    unsigned int lineStripVAO = 0,
+                 lineStripVBO;
+    glGenVertexArrays(1, &lineStripVAO);
+    glGenBuffers(1, &lineStripVBO);
+    glBindVertexArray(lineStripVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, lineStripVBO);
+    glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * count, vertices, GL_STATIC_DRAW);
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    
+    glDrawArrays(GL_LINE_STRIP, 0, count);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+}
+
+void renderLine(glm::vec3& A, glm::vec3& B)
+{
+    glm::vec3 vertices[] = {A, B};
+    unsigned int lineVAO = 0,
+                 lineVBO;
+    glGenVertexArrays(1, &lineVAO);
+    glGenBuffers(1, &lineVBO);
+    glBindVertexArray(lineVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, lineVBO);
+    glBufferData(GL_ARRAY_BUFFER, 6 * sizeof(float), &vertices[0], GL_STATIC_DRAW);
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    
+    glDrawArrays(GL_LINES, 0, 2);
+    glBindVertexArray(0);
+}
+
+void renderFrustum(const glm::mat4& view_proj)
+{
+    glm::mat4 inverse = glm::inverse(view_proj);
+    glm::vec3 corners[8];
+
+    for (int i = 0; i < 8; i++)
+    {
+        glm::vec4 v = inverse * kFrustumCorners[i];
+        v           = v / v.w;
+        corners[i]  = glm::vec3(v.x, v.y, v.z);
+    }
+
+    glm::vec3 _far[5] = { corners[0], corners[1], corners[2], corners[3], corners[0] };
+
+    renderLineStrip(&_far[0], 5);
+
+    glm::vec3 _near[5] = { corners[4], corners[5], corners[6], corners[7], corners[4] };
+
+    renderLineStrip(&_near[0], 5);
+
+    renderLine(corners[0], corners[4]);
+    renderLine(corners[1], corners[5]);
+    renderLine(corners[2], corners[6]);
+    renderLine(corners[3], corners[7]);
+}
 
 unsigned int quadVAO = 0;
 unsigned int quadVBO;
@@ -355,7 +428,7 @@ std::bitset<256> VertexBitHash(glm::vec3* v, glm::vec3* n, glm::vec2* u) {
     return bits;
 }
 
-void ObjLoader(Shader* shader)
+void ObjLoader()
 {
     //std::string inputfile = "Assets/dickies_long_sleeve_shirt/shirt.obj";
 	//std::string inputfile = "Assets/crate.obj";
@@ -430,17 +503,6 @@ void ObjLoader(Shader* shader)
     mesh.Vertices      = &modelDataVertices[0][0];
     mesh.Normals       = &modelDataNormals[0][0];
     mesh.Faces         = &indexes[0];
-
-    // shader->createTexture(&(material.baseColor), "Assets/Textures/rustediron1-alt2-Unreal-Engine/rustediron2_basecolor.png", "BaseColor", 0);
-    // shader->createTexture(&(material.normal), "Assets/Textures/rustediron1-alt2-Unreal-Engine/rustediron2_normal.png", "Normal", 1);
-    // shader->createTexture(&(material.roughness), "Assets/Textures/rustediron1-alt2-Unreal-Engine/rustediron2_roughness.png", "Roughness", 2);
-    // shader->createTexture(&(material.metallic), "Assets/Textures/rustediron1-alt2-Unreal-Engine/rustediron2_metallic.png", "Metallic", 3);
-
-    shader->createTexture(&(material.baseColor), "Assets/t-shirt-lp/textures/T_shirt_albedo.jpg", "BaseColor", 0);
-    shader->createTexture(&(material.normal), "Assets/t-shirt-lp/textures/T_shirt_normal.png", "Normal", 1);
-    shader->createTexture(&(material.roughness), "Assets/t-shirt-lp/textures/T_shirt_roughness.jpg", "Roughness", 2);
-    shader->createTexture(&(material.metallic), "Assets/Textures/rustediron1-alt2-Unreal-Engine/rustediron2_metallic.png", "Metallic", 3);
-    shader->createTexture(&(material.ao), "Assets/t-shirt-lp/textures/T_shirt_AO.jpg", "AmbientOcclussion", 4);
 
     std::cout << "Vertices: " << modelDataVertices.size() << "\n";
     std::cout << "Normals: " << modelDataNormals.size() << "\n";
@@ -537,25 +599,23 @@ int main()
     Shader deferredPass  = Shader("Shaders/DeferredPass.vert", "Shaders/DeferredPass.frag");
     Shader renderTarget  = Shader("Shaders/Render.vert",       "Shaders/Render.frag");
     Shader hitPosition   = Shader("Shaders/HitPosition.vert",  "Shaders/HitPosition.frag");
-    // Shader decalsPass    = Shader("Shaders/Decals.vert",       "Shaders/Decals.frag");
-    // Shader renderDecal   = Shader("Shaders/RenderDecal.vert",  "Shaders/RenderDecal.frag");
-    // Shader bakePass      = Shader("Shaders/Baker.vert",        "Shaders/Baker.frag");
-    // Shader integratePass = Shader("Shaders/Integrate.vert",    "Shaders/Decals.frag");
+    Shader decalsPass    = Shader("Shaders/Decals.vert",       "Shaders/Decals.frag");
     
     renderTarget.use();
     renderTarget.setInt("iChannel0", 0);
 
-    // renderDecal.use();
-    // renderDecal.setInt("iChannel1", 0);
-    // renderDecal.setInt("iChannel2", 1);
+    decalsPass.use();
+    decalsPass.setInt("iDepth", 0);
     
-    // decalsPass.use();
-    // decalsPass.setInt("iDepth", 0);
-    // decalsPass.setInt("iRender", 2);
+    ObjLoader();
 
-    // integratePass.use();
-    // integratePass.setInt("iDepth", 0);
-    // integratePass.setInt("iRender", 2);
+    geometryPass.use();
+
+    geometryPass.createTexture(&(material.normal), "Assets/t-shirt-lp/textures/T_shirt_normal.png", "Normal", 1);
+    geometryPass.createTexture(&(material.roughness), "Assets/t-shirt-lp/textures/T_shirt_roughness.jpg", "Roughness", 2);
+    geometryPass.createTexture(&(material.metallic), "Assets/Textures/rustediron1-alt2-Unreal-Engine/rustediron2_metallic.png", "Metallic", 3);
+    geometryPass.createTexture(&(material.ao), "Assets/t-shirt-lp/textures/T_shirt_AO.jpg", "AmbientOcclussion", 4);
+    geometryPass.createTexture(&(material.baseColor), "Assets/t-shirt-lp/textures/T_shirt_albedo.jpg", "BaseColor", 0);
 
     unsigned int gBuffer;
     glGenFramebuffers(1, &gBuffer);
@@ -630,65 +690,27 @@ int main()
     unsigned int attachments[6] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3, GL_COLOR_ATTACHMENT4, GL_COLOR_ATTACHMENT5 };
     glDrawBuffers(6, attachments);
 
-    // // Render to texture.
-    // unsigned int fbo;
-    // glGenFramebuffers(1, &fbo);
-    // glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    // Render to texture.
+    unsigned int fbo;
+    glGenFramebuffers(1, &fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 
-    // // - Screen space buffer
-    // unsigned int render;
-    // glGenTextures(1, &render);
-    // glBindTexture(GL_TEXTURE_2D, render);
-    // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, WIDTH, HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    // glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, render, 0);
+    geometryPass.use();
+    std::cout << "Albedo Width: "  << geometryPass.Width  << std::endl;
+    std::cout << "Albedo Height: " << geometryPass.Height << std::endl;
 
-    // // Set the list of draw buffers.
-    // unsigned int drawBuffers[1] = {GL_COLOR_ATTACHMENT0};
-    // glDrawBuffers(1, drawBuffers); // "1" is the size of DrawBuffers
+    // - Screen space buffer
+    unsigned int render;
+    glGenTextures(1, &render);
+    glBindTexture(GL_TEXTURE_2D, render);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, WIDTH, HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, render, 0);
 
-    // // Render to texture decals.
-    // unsigned int fboDecal;
-    // glGenFramebuffers(1, &fboDecal);
-    // glBindFramebuffer(GL_FRAMEBUFFER, fboDecal);
-
-    // // - Screen space buffer
-    // unsigned int renderDecalTex;
-    // glGenTextures(1, &renderDecalTex);
-    // glBindTexture(GL_TEXTURE_2D, renderDecalTex);
-    // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, WIDTH, HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    // glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderDecalTex, 0);
-
-    // unsigned int decalUVTex;
-    // glGenTextures(1, &decalUVTex);
-    // glBindTexture(GL_TEXTURE_2D, decalUVTex);
-    // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, WIDTH, HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    // glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, decalUVTex, 0);
-
-    // // Set the list of draw buffers.
-    // unsigned int drawDecal[2] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
-    // glDrawBuffers(2, drawDecal); // "1" is the size of DrawBuffers
-
-    // unsigned int fboUnwrap;
-    // glGenFramebuffers(1, &fboUnwrap);
-    // glBindFramebuffer(GL_FRAMEBUFFER, fboUnwrap);
-
-    // // - Screen space buffer
-    // unsigned int renderUnwrap;
-    // glGenTextures(1, &renderUnwrap);
-    // glBindTexture(GL_TEXTURE_2D, renderUnwrap);
-    // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, WIDTH, HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    // glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderUnwrap, 0);
-
-    // unsigned int drawUnwrap[1] = {GL_COLOR_ATTACHMENT0};
-    // glDrawBuffers(1, drawUnwrap);
+    // Set the list of draw buffers.
+    unsigned int drawBuffers[1] = {GL_COLOR_ATTACHMENT0};
+    glDrawBuffers(1, drawBuffers); // "1" is the size of DrawBuffers
 
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
         std::cout << "Framebuffer not complete!" << std::endl;
@@ -702,15 +724,6 @@ int main()
     deferredPass.setInt("gRoughness", 4);
     deferredPass.setInt("gAO", 5);
 
-    // bakePass.use();
-    // ObjLoader(&bakePass);
-    // bakePass.setInt("gPosition", 0);
-    // bakePass.setInt("gNormal", 1);
-    // bakePass.setInt("gAlbedo", 2);
-    // bakePass.setInt("gMetallic", 3);
-    // bakePass.setInt("gRoughness", 4);
-    // bakePass.setInt("gAO", 5);
-
     /**
      * End Shader Setup
      */
@@ -718,8 +731,6 @@ int main()
     /**
      * Start Geometry Definition
      */
-    geometryPass.use();
-	ObjLoader(&geometryPass);
 
     // Create a Vertex Buffer Object and copy the vertex data to it
     unsigned int VBOVertices, VBONormals, VBOTextureCoordinates, VAO, EBO;
@@ -732,7 +743,7 @@ int main()
 	glGenBuffers(1, &VBONormals);
 	glBindBuffer(GL_ARRAY_BUFFER, VBONormals);
     glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec3) * modelDataNormals.size(), modelDataNormals.data(), GL_STATIC_DRAW);
-    modelDataNormals.clear();
+    //modelDataNormals.clear();
 
 	glGenBuffers(1, &VBOTextureCoordinates);
 	glBindBuffer(GL_ARRAY_BUFFER, VBOTextureCoordinates);
@@ -784,7 +795,8 @@ int main()
 
     //decalsPass.createTextureFromFile(&decalTexture, decalImageBuffer, widthDecal, heightDecal, "iChannel0", 1);
     //decalsPass.createTextureFromFile(&decalTexture, decalImageBuffer, widthDecal, heightDecal, "iChannel0", 1);
-    //decalsPass.createTexture(&decalTexture, "Assets/Textures/Batman.png", "iChannel0", 1);
+    decalsPass.createTexture(&decalTexture, "Assets/Textures/Batman.png", "iChannel0", 1);
+    decalsPass.setInt("iChannel1", 0);
     //integratePass.createTexture(&decalTextureO, "Assets/Textures/Batman.png", "iChannel0", 1);
     //std::cout << "Decal Texture binding: " << decalTexture << std::endl;
 
@@ -1017,24 +1029,30 @@ int main()
                     hitPos = camPos + rayDir * isect.t;
                     
                     unsigned int fid = isect.prim_id;
-                    hitNor.x = mesh.Normals[3 * fid + 0];
-                    hitNor.y = mesh.Normals[3 * fid + 1];
-                    hitNor.z = mesh.Normals[3 * fid + 2];
+                    unsigned int id  = indexes[3 * fid];
+                    /*hitNor.x = mesh.Normals[3 * id + 0];
+                    hitNor.y = mesh.Normals[3 * id + 1];
+                    hitNor.z = mesh.Normals[3 * id + 2];*/
+                    hitNor = modelDataNormals[id];
 
                     projectorPos = hitPos + hitNor * PROJECTOR_DISTANCE;
                     projectorDir = -hitNor;
 
-                    float ratio = heightDecal / widthDecal;
+                    float ratio = float(heightDecal) / float(widthDecal);
                     float proportionateHeight = projectorSize * ratio;
 
-                    glm::vec3 axis = glm::vec3(0.0f, 1.0f, 0.0f);
-                    projectorView = glm::lookAt(projectorPos, hitPos, axis);
+                    glm::mat4 rotate = glm::mat4(1.0f);
+                    rotate = glm::rotate(rotate, glm::radians(0.0f), projectorDir);
+
+                    glm::vec4 axis      = rotate * glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
+                    projectorView       = glm::lookAt(projectorPos, hitPos, axis.xyz());
                     projectorProjection = glm::ortho(-projectorSize, projectorSize, -proportionateHeight, proportionateHeight, 0.1f, FAR_PLANE);
 
                     decalProjector = projectorProjection * projectorView;
 
                     printf("Hit Point: %s\n", glm::to_string(hitPos).c_str());
                     printf("Hit Normal: %s\n", glm::to_string(hitNor).c_str());
+                    printf("Decal Projector: %s\n", glm::to_string(decalProjector).c_str());
                 }
             }
 
@@ -1051,6 +1069,7 @@ int main()
 		ImGui::Text(printTime.c_str());
         ImGui::SliderFloat("Test", &scale, 1.0f, 100.0f);
         ImGui::SliderFloat("Blend", &blend, 0.0f, 1.0f);
+        ImGui::SliderFloat("Projector Size", &projectorSize, 0.1f, 1.0f);
         if (ImGui::Button("Click me")) 
         {
             if (click == 0)
@@ -1086,6 +1105,31 @@ int main()
 
         // render
         // ------
+        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        decalsPass.use();
+        decalsPass.setMat4("model", model);
+        decalsPass.setMat4("projection", projection);
+        decalsPass.setMat4("view", view);
+        decalsPass.setVec2("iResolution", widthHeight);
+        decalsPass.setFloat("iScale", scale);
+        decalsPass.setFloat("iFlip", flip);
+        decalsPass.setFloat("iBlend", blend);
+        decalsPass.setMat4("decalProjector", decalProjector);
+
+
+        glBindVertexArray(VAO);
+
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, material.baseColor);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, decalTexture);
+
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        glDrawElements(GL_TRIANGLES, indexes.size(), GL_UNSIGNED_INT, 0);
+
+
         glEnable(GL_DEPTH_TEST);
         glDepthMask(true);
         glCullFace(GL_BACK);
@@ -1098,7 +1142,7 @@ int main()
         geometryPass.setMat4("view", view);
         glBindVertexArray(VAO); // seeing as we only have a single VAO there's no need to bind it every time, but we'll do so to keep things a bit more organized        
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, material.baseColor);
+        glBindTexture(GL_TEXTURE_2D, render);//material.baseColor);
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, material.normal);
         glActiveTexture(GL_TEXTURE2);
@@ -1137,10 +1181,6 @@ int main()
         deferredPass.setVec3("viewPos", camPos);
         deferredPass.setFloat("iTime", iTime);
         // finally render quad
-
-        // glEnable(GL_SCISSOR_TEST);
-        // glViewport(0, 0, screenWidth, screenHeight);
-        // glScissor(0, 0, screenWidth, screenHeight);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         renderQuad();
@@ -1152,143 +1192,29 @@ int main()
         // depth buffer in another shader stage (or somehow see to match the default framebuffer's internal format with the FBO's internal format).
         glBlitFramebuffer(0, 0, WIDTH, HEIGHT, 0, 0, WIDTH, HEIGHT, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
         
-        glm::mat4 hitPositionModel = glm::mat4(1);
-        hitPositionModel = glm::translate(hitPositionModel, hitPos);
-        hitPositionModel = glm::scale(hitPositionModel, glm::vec3(0.05));
+        // glm::mat4 hitPositionModel = glm::mat4(1);
+        // hitPositionModel = glm::translate(hitPositionModel, hitPos);
+        // hitPositionModel = glm::scale(hitPositionModel, glm::vec3(0.01));
+
+        // glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        // glEnable(GL_DEPTH_TEST);
+
+        // hitPosition.use();
+        // hitPosition.setMat4("model",      hitPositionModel);
+        // hitPosition.setMat4("projection", projection);
+        // hitPosition.setMat4("view",       view);
+        // renderCube();
+
+        glm::mat4 modelFrustum = glm::mat4(1.0f);
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
         glEnable(GL_DEPTH_TEST);
 
         hitPosition.use();
-        hitPosition.setMat4("model", hitPositionModel);
+        hitPosition.setMat4("model",      modelFrustum);
         hitPosition.setMat4("projection", projection);
-        hitPosition.setMat4("view", view);
-        renderCube();
-
-        /*renderTarget.use();
-        glDisable(GL_DEPTH_TEST);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, render);
-
-        // glEnable(GL_SCISSOR_TEST);
-        // glViewport(0, 0, screenWidth, screenHeight);
-        // glScissor(0, 0, screenWidth, screenHeight);
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        renderQuad();
-        
-        glDisable(GL_DEPTH_TEST);
-        glBindFramebuffer(GL_FRAMEBUFFER, fboDecal);
-        decalsPass.use();
-        decalsPass.setMat4("model", model);
-        decalsPass.setMat4("projection", projection);
-        decalsPass.setMat4("view", view);
-        decalsPass.setVec2("iResolution", widthHeight);
-        decalsPass.setFloat("iScale", scale);
-        decalsPass.setFloat("iFlip", flip);
-        decalsPass.setFloat("iBlend", blend);
-
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, rboDepth);
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, decalTexture);
-        glActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_2D, render);
-
-        glEnable(GL_SCISSOR_TEST);
-        glViewport(0, 0, screenWidth, screenHeight);
-        glScissor(0, 0, screenWidth, screenHeight);
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        renderCube();
-
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glBindVertexArray(0);
-
-        renderDecal.use();
-        renderDecal.setVec2("iResolution", widthHeight);
-        glDisable(GL_DEPTH_TEST);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, renderDecalTex);
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, render);
-
-        glEnable(GL_SCISSOR_TEST);
-        glViewport(0, 0, halfWidth, screenHeight);
-        glScissor(0, 0, halfWidth, screenHeight);
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        renderQuad();
-
-        glEnable(GL_DEPTH_TEST);
-        glDepthMask(true);
-        glCullFace(GL_BACK);
-        // Draw texture baker.
-        glBindFramebuffer(GL_FRAMEBUFFER, fboUnwrap);
-        bakePass.use();
-        bakePass.setMat4("model", model);
-        bakePass.setMat4("projection", projection);
-        bakePass.setMat4("view", view);
-        glBindVertexArray(VAO); 
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, material.baseColor);
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, material.normal);
-        glActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_2D, material.roughness);
-        glActiveTexture(GL_TEXTURE3);
-        glBindTexture(GL_TEXTURE_2D, material.metallic);
-        glActiveTexture(GL_TEXTURE4);
-        glBindTexture(GL_TEXTURE_2D, material.ao);
-
-        glEnable(GL_SCISSOR_TEST);
-        glViewport(0, 0, screenWidth, screenHeight);
-        glScissor(0, 0, screenWidth, screenHeight);
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); 
-        glDrawElements(GL_TRIANGLES, indexes.size(), GL_UNSIGNED_INT, 0);
-
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glBindVertexArray(0);
-
-        glDisable(GL_DEPTH_TEST);
-        // integratePass.use();
-        // integratePass.setVec2("iResolution", widthHeight);
-        // integratePass.setMat4("model", model);
-        // integratePass.setMat4("projection", projection);
-        // integratePass.setMat4("view", view);
-        // glActiveTexture(GL_TEXTURE0);
-        // glBindTexture(GL_TEXTURE_2D, renderUnwrap);
-        // glActiveTexture(GL_TEXTURE1);
-        // glBindTexture(GL_TEXTURE_2D, decalUVTex);
-        bakePass.use();
-        bakePass.setMat4("model", model);
-        bakePass.setMat4("projection", projection);
-        bakePass.setMat4("view", view);
-        bakePass.setVec2("iResolution", widthHeight);
-        bakePass.setFloat("iScale", scale);
-        bakePass.setFloat("iFlip", flip);
-        bakePass.setFloat("iBlend", blend);
-
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, rboDepth);
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, decalTexture);
-        glActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_2D, render);
-
-        glEnable(GL_SCISSOR_TEST);
-        glViewport(halfWidth, 0, halfWidth, screenHeight);
-        glScissor(halfWidth, 0, halfWidth, screenHeight);
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); 
-        renderQuad();*/
-
-        //glEnable(GL_DEPTH_TEST);
+        hitPosition.setMat4("view",       view);
+        renderFrustum(decalProjector);
 
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -1308,6 +1234,7 @@ int main()
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL2_Shutdown();
     ImGui::DestroyContext();
+    modelDataNormals.clear();
     indexes.clear();
     delete[] mesh.Vertices;
     delete[] mesh.Normals;

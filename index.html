@@ -11,7 +11,7 @@
 
     <!-- Create the canvas that the C++ code will draw into -->
     <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
-
+    <canvas id="canvasDrawImag" oncontextmenu="event.preventDefault()"></canvas>
     <div>
         <!-- <input type="file" id="objPicker" accept=".obj"> -->
     </div>
@@ -26,35 +26,32 @@
         let cv;
         let clicked = 0;
         let sizeData = [0, 0, 0];
+        let downloadImage = 0;
         window.onload = function()
         {
+            var cvDrawImg = document.getElementById("canvasDrawImag");
+            //cvDrawImg.id = "canvasDrawImag";
+            cvDrawImg.width = 600;
+            cvDrawImg.height = 400;
+            cvDrawImg.style.left = "608px";
+            cvDrawImg.style.top = "8px";
+            cvDrawImg.style.position = "absolute";
             const loadImage = src => 
             {
-
-                //Module.ccall("clearContexts", null, null, null)
-
                 img = new Image()
-                img.addEventListener("load", () => {
+                img.addEventListener("load", () => 
+                {
+                    cv = document.createElement("canvas");
+                    cv.id = "previewCanvas";
+                    cv.height = img.height;
+                    cv.width = img.width;
 
-                    cv = document.createElement("canvas")
-                    cv.id = "previewCanvas"
-                    cv.height = img.height
-                    cv.width = img.width
+                    sizeData = [cv.width, cv.height, clicked];
 
-                    sizeData = [cv.width, cv.height, clicked]
-
-                    previewCanvasContext = cv.getContext("2d")
-                    previewCanvasContext.drawImage(img, 0, 0)
+                    previewCanvasContext = cv.getContext("2d");
+                    previewCanvasContext.drawImage(img, 0, 0);
 
                     console.log("Passing image data to WASM");
-                    // Get imageData from the image
-                    //const imageData = previewCanvasContext.getImageData(0, 0, img.width, img.height).data
-
-                    // Pass the imageData to the C++ code
-                    //ccallArrays("load", null, ["array"], [imageData], {heapIn: "HEAPU8"})
-
-                    //createCanvas("textureLoad", 0, img.width, img.height)
-                    //createCanvas("edgeDetect", 1, img.width, img.height)
                 })
                 img.src = src
             }
@@ -86,7 +83,8 @@
                 passToWASM();
             })
 
-            convert.addEventListener("click", () => {
+            convert.addEventListener("click", () => 
+            {
                 if (!clicked)
                 {
                     clicked = 1;
@@ -96,16 +94,59 @@
                     clicked = 0;
                 }
                 passToWASM();
-            })
+            });
 
-            download.addEventListener("change", () =>{
+            var drawArray = function(arr, width, height) 
+            {
+                // var cvDrawImg = document.createElement("canvas");
+                var render = cvDrawImg.getContext("2d");
+                // cvDrawImg.id = "canvasDrawImag";
+                // cvDrawImg.width = 600;
+                // cvDrawImg.height = 400;
+                // cvDrawImg.style.left = "600px";
+                // cvDrawImg.style.top = "0px";
+                // cvDrawImg.style.position = "absolute";
+                var ctx = cvDrawImg.getContext('2d');
+                
+                // create the imageData object, you'll need the width and height of your image
+                var dataImage = ctx.createImageData(width, height);
+                // browsers supporting TypedArrays
+                if (dataImage.data.set) {
+                    dataImage.data.set(arr);
+                } else {
+                    // IE9
+                    arr.forEach(function(val, i) {
+                    dataImage.data[i] = val;
+                    });
+                }
+                ctx.putImageData(dataImage, 0, 0);
+            };
+
+            download.addEventListener("click", () =>{
                 // const obj2gltf = require("obj2gltf");
                 // const fs = require("fs");
                 // obj2gltf("Assets/t-shirt-lp/source/Shirt.obj").then(function (gltf) {
                 //     const data = Buffer.from(JSON.stringify(gltf));
                 //     console.log(data);
                 //     //fs.writeFileSync("model.gltf", data);
-                console.log("Download file");
+                if (downloadImage == 0)
+                {
+                    downloadImage = 1;
+                }
+                else
+                {
+                    downloadImage = 0;
+                }
+                let downloadImageArray = [downloadImage, 2, 3];
+                // const res = ccallArrays("doubleValues", "array", ["array"], [[1,2,3,4,5]], {heapIn: "HEAP8", heapOut: "HEAP8", returnArraySize: 5})
+                // console.log(res) // [2,4,6,8,10]
+                const res = ccallArrays("doubleValues", "array", ["array"], [downloadImageArray], 
+                                        {heapIn: "HEAPU8", heapOut: "HEAPU8", returnArraySize: 4 * 600 * 400});
+                console.log(res);
+                drawArray(res, 600, 400);
+                // var iData = new ImageData(res, 600, 400);
+                // var ctx = canv.getContext("2d");
+                // ctx.putImageData(iData, 0, 0);
             });
 
         }

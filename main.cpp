@@ -30,8 +30,26 @@
 #define PROJECTOR_DISTANCE 50.0f
 #define FAR_PLANE 1000.0F
 
+const int WIDTH  = 600,
+          HEIGHT = 400;
+
+uint8_t downloadImage;
 uint8_t* decalImageBuffer;
+std::vector<uint8_t> decalResult;
 uint16_t widthDecal = 4509u, heightDecal = 2798u, clicked = 0;
+
+std::vector<uint8_t> uploadImage()
+{
+    unsigned int stride = 4 * WIDTH;
+    //stride += (stride % 4) ? (4 - stride % 4) : 0;
+    unsigned int bufferSize = stride * HEIGHT;
+    std::vector<uint8_t> buffer(bufferSize);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadBuffer(GL_BACK);
+    glReadPixels(0, 0, WIDTH, HEIGHT, GL_RGBA, GL_UNSIGNED_BYTE, buffer.data());
+    //auto result = &buffer[0];
+    return buffer;
+}
 
 uint8_t* loadArray(uint8_t* buf, int bufSize)
 {
@@ -48,7 +66,7 @@ uint8_t* loadArray(uint8_t* buf, int bufSize)
 extern "C"
 {
     EMSCRIPTEN_KEEPALIVE
-    void load (uint8_t* buf, int bufSize) 
+    void load(uint8_t* buf, int bufSize) 
     {
         //printf("[WASM] Loading Texture \n");
         std::cout << "Reading decal image!" << std::endl;
@@ -59,7 +77,7 @@ extern "C"
         free(buf);
     }
     EMSCRIPTEN_KEEPALIVE
-    void passSize (uint16_t* buf, int bufSize)
+    void passSize(uint16_t* buf, int bufSize)
     {
         std::cout << "Reading decal image size!" << std::endl;
         widthDecal  = buf[0];
@@ -70,14 +88,48 @@ extern "C"
         std::cout << "Clicked :"      << +clicked     << std::endl;
         free(buf);
     }
+    EMSCRIPTEN_KEEPALIVE
+    uint8_t* download(uint8_t* buf, int bufSize)
+    {
+        uint8_t result[bufSize];
+        downloadImage = buf[0];
+        result[0] = (buf[0]+1) * 2;
+        std::cout << "Download image buffer size: " << bufSize << std::endl;
+        std::cout << "Download image: " << +downloadImage << std::endl;
+        auto r = &result[0]; 
+        free(buf);
+        return r;
+    }
+    EMSCRIPTEN_KEEPALIVE
+    uint8_t* doubleValues(uint8_t *buf, int bufSize) 
+    {
+        downloadImage = buf[0];
+        if (decalResult.size() > 0)
+        {
+            std::cout << "Successful loading the image into data!" << std::endl;
+            uint8_t* result = &decalResult[0];
+            return result;
+        }
+        else
+        {
+            std::cout << "Unsuccesful loading the image into data!" << std::endl;
+            int size = 4 * WIDTH * HEIGHT;
+            uint8_t values[size];
+    
+            for (int i = 0; i < size; i++) 
+            {
+                values[i] = i;
+            }
+        
+            auto arrayPtr = &values[0];
+            return arrayPtr;
+        }
+    }
 }
 
 bool useWindow = false;
 float camDistance = 1.f;
 static ImGuizmo::OPERATION mCurrentGizmoOperation(ImGuizmo::TRANSLATE);
-
-const int WIDTH  = 600,
-          HEIGHT = 400;
 
 // an example of something we will control from the javascript side
 
@@ -1128,6 +1180,20 @@ int main()
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glDrawElements(GL_TRIANGLES, indexes.size(), GL_UNSIGNED_INT, 0);
+
+        if (downloadImage == 1)
+        {
+            // unsigned int stride = 4 * WIDTH;
+            // //stride += (stride % 4) ? (4 - stride % 4) : 0;
+            // unsigned int bufferSize = stride * HEIGHT;
+            // std::vector<char> buffer(bufferSize);
+            // glPixelStorei(GL_PACK_ALIGNMENT, 1);
+            // glReadBuffer(GL_BACK);
+            // glReadPixels(0, 0, WIDTH, HEIGHT, GL_RGBA, GL_UNSIGNED_BYTE, buffer.data());
+            // downloadImage = 0;
+            decalResult = uploadImage();
+            downloadImage = 0;
+        }
 
 
         glEnable(GL_DEPTH_TEST);

@@ -832,7 +832,7 @@ int main()
     bool show_demo_window = true;
     
     float scale = 1.0f;
-    float blend = 0.0f;
+    float blend = 0.5f;
 	bool insideImGui = false;
     
 	// Create the camera (eye).

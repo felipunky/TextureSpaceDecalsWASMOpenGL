@@ -35,16 +35,28 @@ void main()
 
     //vec4 decalPos = decalProjector * vec4(WorldPos, 1.0);
     vec3 decalUV = WorldPos;//decalPos.xyz * 0.5 + 0.5;
-
+    float clip = 1.0;
     if (CheckBox(decalUV))
     {
         //FragColor = texture(iChannel1, TexCoords);
         //FragColor.a = 0.0;
-        discard;
+        //discard;
+        decalUV *= 0.;
+        clip = 0.;
     }
 
+    if (iFlip == 1.0)
+    {
+        decalUV.y = 1. - decalUV.y;
+    }
+
+    vec4 projectedDecal = texture(iChannel0, decalUV.xy);
+    vec4 albedoMap      = texture(iChannel1, TexCoords);
+
     // Sample the decal texture using the Decal UVs.
-    FragColor = texture(iChannel0, decalUV.xy);//vec4(mix(texture(iChannel0, decalUV.xy).rgb, texture(iChannel1, TexCoords).rgb, 1.-FragColor.a), 1.0);
+    projectedDecal = mix(projectedDecal, albedoMap, iBlend) * clip;
+    albedoMap      *= 1. - clip;
+    FragColor = projectedDecal + albedoMap;//mix(albedoMap, projectedDecal, iBlend);
 
     // vec2 uv = gl_FragCoord.xy / iResolution.xy;
     // vec4 renderResult = texture(iRender, uv);

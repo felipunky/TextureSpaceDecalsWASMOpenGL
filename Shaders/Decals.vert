@@ -9,11 +9,13 @@ out vec2 TexCoords;
 uniform mat4 model;                                        
 uniform mat4 view;                                         
 uniform mat4 projection;  
-uniform mat4 decalProjector;                                 
+uniform mat4 decalProjector;      
+
 void main()                                                
 {                                     
   vec4 objPos = vec4(VertexPosition.xyz, 1.0);      
   WorldPos = (decalProjector * objPos).xyz * 0.5 + 0.5;
   TexCoords = VertexTextureCoords;
-  gl_Position = vec4(VertexTextureCoords * 2. - 1., 0., 1.);              
+  vec4 Position = vec4(VertexTextureCoords * 2. - 1., 0., 1.);
+  gl_Position = Position;              
 }                                                      

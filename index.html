@@ -27,9 +27,10 @@
         let clicked = 0;
         let sizeData = [0, 0, 0];
         let downloadImage = 0;
-        let widthDecal  = 600;//4509;
-        let heightDecal = 400;//2798;
+        let widthDecal  = /*600;//*/4096;
+        let heightDecal = /*400;//*/4096;
         let flipOnDownload = 0;
+        let res;
         window.onload = function()
         {
             var cvDrawImg = document.getElementById("canvasDrawImag");
@@ -48,6 +49,7 @@
                     cv.id = "previewCanvas";
                     cv.height = img.height;
                     cv.width = img.width;
+                    clicked = 1;
 
                     sizeData = [cv.width, cv.height, clicked];
 
@@ -55,49 +57,27 @@
                     previewCanvasContext.drawImage(img, 0, 0);
 
                     console.log("Passing image data to WASM");
+
+                    passToWASM();
                 })
                 img.src = src
             }
-            // Default image
-            loadImage("Assets/Textures/WatchMen.jpeg");
 
             function passToWASM()
             {
                 const imageData = previewCanvasContext.getImageData(0, 0, cv.width, cv.height).data;
-                console.log("Image data size: " + imageData.length);
-                console.log("Width: "    + cv.width);
-                console.log("Height: "   + cv.height);
-                
-                console.log("Width 1: "  + sizeData[0]);
-                console.log("Height 2: " + sizeData[1]);
-                console.log("Clicked: "  + sizeData[2]);
-                
-                //const sizeData = [cv.width, cv.height, clicked, imageData.length];
                 ccallArrays("passSize", null, ["array"], [sizeData], {heapIn: "HEAPU16"});
                 ccallArrays("load", null, ["array"], [imageData], {heapIn: "HEAPU8"});
-                // // Pass the imageData to the C++ code
-                // ccallArrays("load", null, ["array"], [imageData], {heapIn: "HEAPU8"})
+                //previewCanvasContext.clearRect(0, 0, cv.width, cv.height);
+                clicked = 0;
+                sizeData[2] = clicked;
             } 
 
             // File input
             const fileInput = document.getElementById("fileInput");
             fileInput.addEventListener("change", () => {
                 loadImage(URL.createObjectURL(event.target.files[0]))
-                passToWASM();
             })
-
-            convert.addEventListener("click", () => 
-            {
-                if (!clicked)
-                {
-                    clicked = 1;
-                }
-                else
-                {
-                    clicked = 0;
-                }
-                passToWASM();
-            });
 
             function flip(imageData, ctx)
             {
@@ -133,38 +113,39 @@
                 flip(dataImage, ctx);
             };
 
+            downloadImage = 0;
+
+            function UpdateTexture()
+            {
+                let downloadImageArr = [downloadImage, 1, 2];
+                ccallArrays("downloadDecalTrigger", null, ["array"], [downloadImageArr], {heapIn: "HEAPU8"});
+            }
             function ViewTexture()
             {
-                downloadImage = 1;
                 let downloadImageArray = [downloadImage, 2, 3];
-                const res = ccallArrays("downloadDecal", "array", ["array"], [downloadImageArray], 
-                                        {heapIn: "HEAPU8", heapOut: "HEAPU8", returnArraySize: 4 * widthDecal * heightDecal});
-                drawArray(res, widthDecal, heightDecal);
-                downloadImage = 0;
+                res = ccallArrays("downloadDecal", "array", ["array"], [downloadImageArray], 
+                                  {heapIn: "HEAPU8", heapOut: "HEAPU8", returnArraySize: 4 * widthDecal * heightDecal});
             }
-
-            function downloadUrl(url)
-            {
-                window.open(url, '_blank');
-            }
-
             viewTexture.addEventListener("click", () =>
             {
+                downloadImage = 1;
+                UpdateTexture();
                 ViewTexture();
+                drawArray(res, widthDecal, heightDecal);
             });
 
-            function downloadImage(url, name)
+            window.oncontextmenu = function(e) 
             {
-                var a = document.createElement('a');
-                a.href = url;
-                a.download = name;
-                document.body.appendChild(a);
-                a.click();
+                e.preventDefault();
+                downloadImage = 1;
+                UpdateTexture();
+                //alert('You Clicked');
             }
 
             document.getElementById('download').addEventListener("click", function(e) 
             {
                 ViewTexture();
+                drawArray(res, widthDecal, heightDecal);
                 var dataURL = cvDrawImg.toDataURL("image/png", 1.0);
                 var a = document.createElement('a');
                 a.href = dataURL;
@@ -190,6 +171,20 @@
                 // Mesh.
                 downloadUrl("Assets/t-shirt-lp/source/Shirt.gltf");
             });
+
+            function downloadUrl(url)
+            {
+                window.open(url, '_blank');
+            }
+
+            function downloadImage(url, name)
+            {
+                var a = document.createElement('a');
+                a.href = url;
+                a.download = name;
+                document.body.appendChild(a);
+                a.click();
+            }
         }
     </script>
     <!-- Call the javascript glue code (index.js) as generated by Emscripten -->
@@ -203,7 +198,6 @@
 
 </body>
 <input id="fileInput" type="file" accept="image/*" value="./image.png">
-<button id="convert">Convert</button>
 <button id="viewTexture">View Texture</button>
 <button id="download">Download</button>
 </html>

@@ -9,15 +9,15 @@ out vec3 normals;
 out vec2 texCoords;                                    
 uniform mat4 model;                                        
 uniform mat4 view;                                         
-uniform mat4 projection;                                   
+uniform mat4 projection;  
+uniform mat4 decalProjector;                                 
 void main()                                                
 {                
-  vec4 p = vec4(VertexTextureCoords * 2. -1., 0., 1.);
   texCoords = VertexTextureCoords;     
   mat3 normalMatrix = transpose(inverse(mat3(model)));
   normals = normalMatrix * VertexNormals;                         
   vec4 worldPos = model * vec4(VertexPosition.xyz, 1.0);
   vec4 objPos = projection * view * worldPos;      
   positions = (objPos).xyz;
-  gl_Position = objPos;              
+  gl_Position = decalProjector * vec4(VertexPosition.xyz, 1.0);              
 }                                                      

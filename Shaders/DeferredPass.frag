@@ -1,8 +1,11 @@
 #version 300 es
 precision mediump float;
 
-in vec2 TexCoords;
-uniform sampler2D gPosition;
+//in vec2 TexCoords;
+in vec3 positions;
+in vec3 normals;                                
+in vec2 TexCoords; 
+
 uniform sampler2D gNormal;
 uniform sampler2D gAlbedo;
 uniform sampler2D gMetallic;
@@ -70,7 +73,7 @@ vec3 fresnelSchlick(float cosTheta, vec3 F0)
 
 void main()
 {             
-    vec3 FragPos = texture(gPosition, TexCoords).xyz;
+    vec3 FragPos    = positions;//texture(gPosition, TexCoords).xyz;
     vec3 albedo     = pow(texture(gAlbedo, TexCoords).rgb, vec3(2.2));
     float metallic  = 0.0;//texture(gMetallic, TexCoords).r;
     float roughness = texture(gRoughness, TexCoords).r;

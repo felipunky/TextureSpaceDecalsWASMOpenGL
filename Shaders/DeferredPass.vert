@@ -1,11 +1,23 @@
 #version 300 es
-layout (location = 0) in vec3 aPos;
-layout (location = 1) in vec2 aTexCoords;
+precision mediump float;
 
-out vec2 TexCoords;
-
-void main()
-{
-    TexCoords = aTexCoords;
-    gl_Position = vec4(aPos, 1.0);
-}
+layout (location = 0) in vec3 VertexPosition;  
+layout (location = 1) in vec3 VertexNormals;                                 
+layout (location = 2) in vec2 VertexTextureCoords;
+out vec3 positions;
+out vec3 normals;                                
+out vec2 TexCoords;                                    
+uniform mat4 model;                                        
+uniform mat4 view;                                         
+uniform mat4 projection;                                   
+void main()                                                
+{                
+  vec4 p = vec4(VertexTextureCoords * 2. -1., 0., 1.);
+  TexCoords = VertexTextureCoords;     
+  mat3 normalMatrix = transpose(inverse(mat3(model)));
+  normals = normalMatrix * VertexNormals;                         
+  vec4 worldPos = model * vec4(VertexPosition.xyz, 1.0);
+  vec4 objPos = projection * view * worldPos;      
+  positions = (objPos).xyz;
+  gl_Position = objPos;              
+}                                                      

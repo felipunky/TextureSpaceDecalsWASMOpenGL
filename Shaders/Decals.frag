@@ -3,9 +3,6 @@ precision mediump float;
 
 out vec4 FragColor;
 
-//layout (location = 0) out vec4 FragColor;
-//layout (location = 1) out vec4 DecalCoords;
-
 uniform mat4 model;                                        
 uniform mat4 view;                                         
 uniform mat4 projection; 
@@ -22,7 +19,7 @@ uniform float iBlend;
 in vec2 TexCoords;
 in vec3 WorldPos;
 
-#define BIAS 0.001
+#define BIAS 1e-5
 
 bool CheckBox(vec3 uv)
 {
@@ -42,7 +39,8 @@ void main()
     float depth = texture(iDepth, decalUV.xy).r;
     if ((decalUV.z - BIAS) > depth)
     {
-        discard;
+        decalUV *= 0.;
+        clip = 0.;
     }
 
     if (iFlip == 1.0)

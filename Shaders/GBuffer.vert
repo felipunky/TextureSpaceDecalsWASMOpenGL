@@ -18,6 +18,6 @@ void main()
   normals = normalMatrix * VertexNormals;                         
   vec4 worldPos = model * vec4(VertexPosition.xyz, 1.0);
   vec4 objPos = projection * view * worldPos;      
-  positions = (objPos).xyz;
-  gl_Position = decalProjector * vec4(VertexPosition.xyz, 1.0);              
+  positions = objPos.xyz;
+  gl_Position = decalProjector * vec4(VertexPosition, 1.0);              
 }                                                      

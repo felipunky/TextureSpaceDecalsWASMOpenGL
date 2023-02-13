@@ -48,6 +48,8 @@ void main()
         decalUV.y = 1. - decalUV.y;
     }
 
+    decalUV *= iScale;
+
     vec4 projectedDecal = texture(iChannel0, decalUV.xy);
     vec4 albedoMap      = texture(iChannel1, texCoords);
 

@@ -11,7 +11,7 @@
 
     <!-- Create the canvas that the C++ code will draw into -->
     <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
-    <canvas id="canvasDrawImag" oncontextmenu="event.preventDefault()"></canvas>
+    <!-- <canvas id="canvasDrawImag" oncontextmenu="event.preventDefault()"></canvas> -->
     <div>
         <!-- <input type="file" id="objPicker" accept=".obj"> -->
     </div>
@@ -27,19 +27,15 @@
         let clicked = 0;
         let sizeData = [0, 0, 0];
         let downloadImage = 0;
-        let widthDecal  = /*600;//*/4096;
-        let heightDecal = /*400;//*/4096;
+        let widthDecal  = 4096;
+        let heightDecal = 4096;
         let flipOnDownload = 0;
         let res;
+        let cvDrawImg;
+        let meshData;
+        let flipAlbedo = 0;
         window.onload = function()
-        {
-            var cvDrawImg = document.getElementById("canvasDrawImag");
-            //cvDrawImg.id = "canvasDrawImag";
-            cvDrawImg.width  = widthDecal;
-            cvDrawImg.height = heightDecal;
-            cvDrawImg.style.left = "608px";
-            cvDrawImg.style.top = "8px";
-            cvDrawImg.style.position = "absolute";
+        {   
             const loadImage = src => 
             {
                 img = new Image()
@@ -60,7 +56,35 @@
 
                     passToWASM();
                 })
-                img.src = src
+                img.src = src;
+            }
+
+            const loadImageAlbedo = src => 
+            {
+                let imgAlbedo = new Image()
+                imgAlbedo.addEventListener("load", () => 
+                {
+                    cv = document.createElement("canvas");
+                    cv.id = "previewCanvas";
+                    cv.height = imgAlbedo.height;
+                    cv.width = imgAlbedo.width;
+                    flipAlbedo = 1;
+                    sizeData = [cv.width, cv.height, flipAlbedo];
+
+                    previewCanvasContext = cv.getContext("2d");
+                    previewCanvasContext.drawImage(imgAlbedo, 0, 0);
+
+                    console.log("Passing Albedo image data to WASM");
+
+                    const imageData = previewCanvasContext.getImageData(0, 0, cv.width, cv.height).data;
+                    ccallArrays("passSizeAlbedo", null, ["array"], [sizeData], {heapIn: "HEAPU16"});
+                    ccallArrays("loadAlbedo", null, ["array"], [imageData], {heapIn: "HEAPU8"});
+                    //previewCanvasContext.clearRect(0, 0, cv.width, cv.height);
+                    flipAlbedo = 0;
+                    sizeData[2] = clicked;
+                    console.log("You are loading the Albedo texture...");
+                })
+                imgAlbedo.src = src;
             }
 
             function passToWASM()
@@ -73,7 +97,7 @@
                 sizeData[2] = clicked;
             } 
 
-            // File input
+            // Image input
             const fileInput = document.getElementById("fileInput");
             fileInput.addEventListener("change", () => {
                 loadImage(URL.createObjectURL(event.target.files[0]))
@@ -95,6 +119,11 @@
 
             var drawArray = function(arr, width, height) 
             {
+                cvDrawImg = document.createElement("canvas");
+                cvDrawImg.id = "canvasDrawImag";
+                cvDrawImg.width  = widthDecal;
+                cvDrawImg.height = heightDecal;
+
                 var ctx = cvDrawImg.getContext('2d');
                 // create the imageData object, you'll need the width and height of your image
                 var dataImage = ctx.createImageData(width, height);
@@ -126,20 +155,35 @@
                 res = ccallArrays("downloadDecal", "array", ["array"], [downloadImageArray], 
                                   {heapIn: "HEAPU8", heapOut: "HEAPU8", returnArraySize: 4 * widthDecal * heightDecal});
             }
-            viewTexture.addEventListener("click", () =>
-            {
-                downloadImage = 1;
-                UpdateTexture();
-                ViewTexture();
-                drawArray(res, widthDecal, heightDecal);
-            });
 
             window.oncontextmenu = function(e) 
             {
                 e.preventDefault();
                 downloadImage = 1;
                 UpdateTexture();
-                //alert('You Clicked');
+            }
+
+            // Albedo input
+            // Image input
+            const albedoInput = document.getElementById("uploadAlbedo");
+            albedoInput.addEventListener("change", () => {
+                loadImageAlbedo(URL.createObjectURL(event.target.files[0]));
+            })
+
+            // Mesh input
+            const meshInput = document.getElementById("uploadMesh");
+            meshInput.addEventListener("change", () => 
+            {
+                readFile(event.target.files[0]);
+            });
+
+            async function readFile(file)
+            {
+                const text = await file.text();
+                
+                var buffer = _malloc(text.length + 1);
+                stringToUTF8(text, buffer, text.length + 1);
+                ccall("passObj", "null", ["number"], [buffer]);
             }
 
             document.getElementById('download').addEventListener("click", function(e) 
@@ -174,7 +218,7 @@
 
             function downloadUrl(url)
             {
-                window.open(url, '_blank');
+                window.open(url, '_self');
             }
 
             function downloadImage(url, name)
@@ -197,7 +241,11 @@
     </script>
 
 </body>
-<input id="fileInput" type="file" accept="image/*" value="./image.png">
-<button id="viewTexture">View Texture</button>
+<button style="display: inline; height:30px;" onclick="document.getElementById('fileInput').click()">Choose Image for Decal</button>
+<button style="display: inline; height:30px;" onclick="document.getElementById('uploadAlbedo').click()">Choose Image for Albedo</button>
+<input id="fileInput" style="display:none" type="file" accept="image/*" value="./image.png">
+<button style="display: inline; height:30px;" onclick="document.getElementById('uploadMesh').click()">Choose New Mesh</button>
+<input id="uploadMesh" style="display:none" type="file" accept=".obj">
+<input id="uploadAlbedo" style="display:none" type="file" accept="image/*" value="./image.png">
 <button id="download">Download</button>
 </html>

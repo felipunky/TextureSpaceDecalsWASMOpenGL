@@ -16,6 +16,7 @@ uniform sampler2D Normal;
 uniform sampler2D Roughness;
 uniform sampler2D Metallic;
 uniform sampler2D AmbientOcclussion; 
+uniform float flipAlbedo;
 
 void main()
 {    
@@ -24,7 +25,13 @@ void main()
     // also store the per-fragment normals into the gbuffer
     gNormal = normalize(texture(Normal, texCoords).xyz);
     // and the diffuse per-fragment color
-    gAlbedo = texture(BaseColor, texCoords).rgb;
+    vec2 texCoordsAlbedo = texCoords;
+    if (flipAlbedo == 1.)
+    {
+        texCoordsAlbedo.y = 1. - texCoordsAlbedo.y;
+        //gPosition.y = 1. - gPosition.y;
+    }
+    gAlbedo = texture(BaseColor, texCoordsAlbedo).rgb;
     gMetallic = texture(Metallic, texCoords).rgb;
     gRoughness = texture(Roughness, texCoords).rgb;
     gAO = texture(AmbientOcclussion, texCoords).rgb;

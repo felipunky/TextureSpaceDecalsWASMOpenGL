@@ -16,6 +16,7 @@ out vec4 FragColor;
 
 uniform vec3 viewPos;
 uniform float iTime;
+uniform float iFlipAlbedo;
 
 const float PI = 3.14159265359;
 
@@ -74,7 +75,12 @@ vec3 fresnelSchlick(float cosTheta, vec3 F0)
 void main()
 {             
     vec3 FragPos    = positions;//texture(gPosition, TexCoords).xyz;
-    vec3 albedo     = pow(texture(gAlbedo, TexCoords).rgb, vec3(2.2));
+    vec2 texCoordsAlbedo = TexCoords;
+    if (iFlipAlbedo == 1.0)
+    {
+        texCoordsAlbedo.y = 1. - texCoordsAlbedo.y;
+    }
+    vec3 albedo     = pow(texture(gAlbedo, texCoordsAlbedo).rgb, vec3(2.2));
     float metallic  = 0.0;//texture(gMetallic, TexCoords).r;
     float roughness = texture(gRoughness, TexCoords).r;
     float ao        = texture(gAO, TexCoords).r;

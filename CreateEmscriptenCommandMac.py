@@ -54,6 +54,7 @@ emscriptenCommand = "emcc " + \
                     "-s WASM=1 " + \
                     "-s USE_SDL=2 " + \
                     "-s GL_DEBUG=1 " + \
+                    "-s FORCE_FILESYSTEM=1 " + \
                     webGLVersion + \
                     "-s ALLOW_MEMORY_GROWTH=1 " + \
                     optimizationLevel + \

@@ -30,14 +30,29 @@
 #define PROJECTOR_DISTANCE 50.0f
 #define FAR_PLANE 1000.0F
 
-const int WIDTH  = 600,
-          HEIGHT = 400;
+const int WIDTH  = 800,
+          HEIGHT = 600;
 
+float* newVertices;
+float* newNormals;
+float* newTextureCoords;
+int newVerticesSize;
+int flipAlbedo = 0;
+uint8_t reload = 0u;
 uint8_t downloadImage = 0u;
-std::vector<uint8_t> decalImageBuffer;
+std::vector<uint8_t> decalImageBuffer,
+                     albedoBuffer,
+                     roughnessBuffer,
+                     normalBuffer,
+                     metallicBuffer,
+                     ambienOcclusionBuffer;
 std::vector<uint8_t> decalResult;
-uint16_t widthDecal = 4509u, heightDecal = 2798u, changeDecal = 0u;
+uint16_t widthDecal = 4509u, heightDecal = 2798u, changeDecal = 0u,
+         widthAlbedo,        heightAlbedo,        changeAlbedo = 0u;
 Shader geometryPass = Shader();
+
+nanort::BVHAccel<float> accel;
+unsigned int VBOVertices, VBONormals, VBOTextureCoordinates, VAO, EBO;
 
 std::vector<uint8_t> uploadImage()
 {
@@ -60,8 +75,31 @@ std::vector<uint8_t> loadArray(uint8_t* buf, int bufSize)
     return newBuf;
 }
 
+void reloadObj();
+void ObjLoader(std::string inputFile);
+
+struct Material
+{
+    unsigned int baseColor;
+    unsigned int normal;
+    unsigned int roughness;
+    unsigned int metallic;
+    unsigned int ao;
+};
+
+Material material;
+
 extern "C"
 {
+    EMSCRIPTEN_KEEPALIVE
+    void passObj(char* buf)
+    {
+        //std::cout << "New mesh content: " << buf << std::endl;
+        std::string result = buf;
+        ObjLoader(result);
+        reloadObj();
+        free(buf);
+    }
     EMSCRIPTEN_KEEPALIVE
     void load(uint8_t* buf, int bufSize) 
     {
@@ -70,7 +108,29 @@ extern "C"
         std::cout << "Decal buffer size: " << bufSize << std::endl;
         
         decalImageBuffer = loadArray(buf, bufSize);
-        delete buf;
+        free(buf);
+    }
+    EMSCRIPTEN_KEEPALIVE
+    void loadAlbedo(uint8_t* buf, int bufSize)
+    {
+        std::cout << "Reading albedo from file!" << std::endl;
+        std::cout << "Albedo buffer size: " << bufSize << std::endl;
+
+        albedoBuffer = loadArray(buf, bufSize);
+        geometryPass.createTextureFromFile(&(material.baseColor), buf, geometryPass.Width, geometryPass.Height, "BaseColor", 0);
+        free(buf);
+    }
+    EMSCRIPTEN_KEEPALIVE
+    void passSizeAlbedo(uint16_t* buf, int bufSize)
+    {
+        std::cout << "Reading decal image size!" << std::endl;
+        geometryPass.Width = (int)buf[0];
+        geometryPass.Height = (int)buf[1];
+        flipAlbedo = (int)buf[2];
+        std::cout << "Albedo Width: "  << +geometryPass.Width  << std::endl;
+        std::cout << "Albedo Height: " << +geometryPass.Height << std::endl;
+        std::cout << "Changed Albedo: "<< +flipAlbedo        << std::endl;
+        free(buf);
     }
     EMSCRIPTEN_KEEPALIVE
     void passSize(uint16_t* buf, int bufSize)
@@ -83,18 +143,6 @@ extern "C"
         std::cout << "Decal Height: " << +heightDecal << std::endl;
         std::cout << "Clicked :"      << +changeDecal     << std::endl;
         free(buf);
-    }
-    EMSCRIPTEN_KEEPALIVE
-    uint8_t* download(uint8_t* buf, int bufSize)
-    {
-        uint8_t result[bufSize];
-        downloadImage = buf[0];
-        result[0] = (buf[0]+1) * 2;
-        std::cout << "Download image buffer size: " << bufSize << std::endl;
-        std::cout << "Download image: " << +downloadImage << std::endl;
-        auto r = &result[0]; 
-        free(buf);
-        return r;
     }
     EMSCRIPTEN_KEEPALIVE
     uint8_t* downloadDecal(uint8_t *buf, int bufSize) 
@@ -161,17 +209,6 @@ float     projectorSize     = 0.1f;
 float     projectorRotation = 0.0f;
 
 int lastUsing = 0;
-
-struct Material
-{
-    unsigned int baseColor;
-    unsigned int normal;
-    unsigned int roughness;
-    unsigned int metallic;
-    unsigned int ao;
-};
-
-Material material;
 
 struct Mesh
 {
@@ -483,18 +520,29 @@ std::bitset<256> VertexBitHash(glm::vec3* v, glm::vec3* n, glm::vec2* u) {
     return bits;
 }
 
-void ObjLoader()
+void ObjLoader(std::string inputFile)
 {
-    //std::string inputfile = "Assets/dickies_long_sleeve_shirt/shirt.obj";
-	//std::string inputfile = "Assets/crate.obj";
-    //std::string inputfile = "Assets/shirtTwo.obj";
-    //std::string inputfile = "Assets/Shirt/BetterTShirt/BetterShirt.obj";
-    std::string inputfile = "Assets/t-shirt-lp/source/Shirt.obj";
+    bboxMin = glm::vec3(1e+5);
+    bboxMax = glm::vec3(-1e+5);   
+    modelDataVertices.clear();
+    modelDataNormals.clear();
+    modelDataTextureCoordinates.clear();
+    indexes.clear();
+    delete[] mesh.Vertices;
+    //delete[] mesh.Normals;
+    delete[] mesh.Faces;
 
-	std::istringstream stream(LoadTextFile(inputfile));
-    //membuf sbuf(objFile, nullptr);
-    //std::istream stream(&sbuf);
+    std::istringstream stream;
+    if (inputFile == "Assets/t-shirt-lp/source/Shirt.obj")
+    {
+        stream = std::istringstream(LoadTextFile(inputFile));
+    }
 
+	else
+    {
+        stream = std::istringstream(inputFile);
+    }
+    //std::cout << stream.str() << std::endl;
     tinyobj::attrib_t attrib;
     std::vector<tinyobj::shape_t> shapes;
     std::vector<tinyobj::material_t> materials;
@@ -565,6 +613,87 @@ void ObjLoader()
     std::cout << "Materials: " << materials.size() << "\n";
     std::cout << "BboxMax: {x: " << bboxMax.x << ", y: " << bboxMax.y << ", z: " << bboxMax.z << "}\n";
     std::cout << "BboxMin: {x: " << bboxMin.x << ", y: " << bboxMin.y << ", z: " << bboxMin.z << "}\n";
+}
+
+void CreateBOs()
+{
+    // Create a Vertex Buffer Object and copy the vertex data to it
+    //unsigned int VBOVertices, VBONormals, VBOTextureCoordinates, VAO, EBO;
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBOVertices);
+	glBindBuffer(GL_ARRAY_BUFFER, VBOVertices);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec3) * modelDataVertices.size(), modelDataVertices.data(), GL_STATIC_DRAW);
+    modelDataVertices.clear();
+
+	glGenBuffers(1, &VBONormals);
+	glBindBuffer(GL_ARRAY_BUFFER, VBONormals);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec3) * modelDataNormals.size(), modelDataNormals.data(), GL_STATIC_DRAW);
+    //modelDataNormals.clear();
+
+	glGenBuffers(1, &VBOTextureCoordinates);
+	glBindBuffer(GL_ARRAY_BUFFER, VBOTextureCoordinates);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec2) * modelDataTextureCoordinates.size(), modelDataTextureCoordinates.data(), GL_STATIC_DRAW);
+    modelDataTextureCoordinates.clear();
+
+    glGenBuffers(1, &EBO);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned int) * indexes.size(), indexes.data(), GL_STATIC_DRAW);
+    //indexes.clear();
+    // bind the Vertex Array Object first, then bind and set vertex buffer(s), and then configure vertex attributes(s).
+    glBindVertexArray(VAO);
+
+    //glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+	glBindBuffer(GL_ARRAY_BUFFER, VBOVertices);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+
+	glEnableVertexAttribArray(1);
+	glBindBuffer(GL_ARRAY_BUFFER, VBONormals);
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+	
+	glEnableVertexAttribArray(2);
+	glBindBuffer(GL_ARRAY_BUFFER, VBOTextureCoordinates);
+	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
+}
+
+void BuildBVH()
+{
+    nanort::BVHBuildOptions<float> build_options;  // Use default option
+    build_options.cache_bbox = false;
+
+    printf("  BVH build option:\n");
+    printf("    # of leaf primitives: %d\n", build_options.min_leaf_primitives);
+    printf("    SAH binsize         : %d\n", build_options.bin_size);
+
+    //std::cout << "Vertices size: " << (sizeof(vertices) / sizeof(vertices[0])) << std::endl;
+
+    nanort::TriangleMesh<float> triangle_mesh(mesh.Vertices, mesh.Faces, sizeof(float) * 3);
+    nanort::TriangleSAHPred<float> triangle_pred(mesh.Vertices, mesh.Faces, sizeof(float) * 3);
+
+    printf("num_triangles = %zu\n", mesh.NumOfFaces);
+    printf("faces = %p\n", mesh.Faces);
+
+    //nanort::BVHAccel<float> accel;
+    bool ret = accel.Build(mesh.NumOfFaces, triangle_mesh, triangle_pred, build_options);
+    assert(ret);
+
+    nanort::BVHBuildStatistics stats = accel.GetStatistics();
+
+    printf("  BVH statistics:\n");
+    printf("    # of leaf   nodes: %d\n", stats.num_leaf_nodes);
+    printf("    # of branch nodes: %d\n", stats.num_branch_nodes);
+    printf("  Max tree depth     : %d\n", stats.max_tree_depth);
+    float bmin[3], bmax[3];
+    accel.BoundingBox(bmin, bmax);
+    printf("  Bmin               : %f, %f, %f\n", bmin[0], bmin[1], bmin[2]);
+    printf("  Bmax               : %f, %f, %f\n", bmax[0], bmax[1], bmax[2]);
+}
+
+void reloadObj()
+{
+    BuildBVH();
+    CreateBOs();
 }
 
 int main()
@@ -655,7 +784,7 @@ int main()
     Shader hitPosition   = Shader("Shaders/HitPosition.vert",  "Shaders/HitPosition.frag");
     Shader decalsPass    = Shader("Shaders/Decals.vert",       "Shaders/Decals.frag");
     
-    ObjLoader();
+    ObjLoader("Assets/t-shirt-lp/source/Shirt.obj");
 
     geometryPass.use();
 
@@ -724,51 +853,14 @@ int main()
      */
 
     // Create a Vertex Buffer Object and copy the vertex data to it
-    unsigned int VBOVertices, VBONormals, VBOTextureCoordinates, VAO, EBO;
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBOVertices);
-	glBindBuffer(GL_ARRAY_BUFFER, VBOVertices);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec3) * modelDataVertices.size(), modelDataVertices.data(), GL_STATIC_DRAW);
-    modelDataVertices.clear();
+    CreateBOs();
 
-	glGenBuffers(1, &VBONormals);
-	glBindBuffer(GL_ARRAY_BUFFER, VBONormals);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec3) * modelDataNormals.size(), modelDataNormals.data(), GL_STATIC_DRAW);
-    //modelDataNormals.clear();
-
-	glGenBuffers(1, &VBOTextureCoordinates);
-	glBindBuffer(GL_ARRAY_BUFFER, VBOTextureCoordinates);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec2) * modelDataTextureCoordinates.size(), modelDataTextureCoordinates.data(), GL_STATIC_DRAW);
-    modelDataTextureCoordinates.clear();
-
-    glGenBuffers(1, &EBO);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned int) * indexes.size(), indexes.data(), GL_STATIC_DRAW);
-    //indexes.clear();
-    // bind the Vertex Array Object first, then bind and set vertex buffer(s), and then configure vertex attributes(s).
-    glBindVertexArray(VAO);
-
-    //glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-	glBindBuffer(GL_ARRAY_BUFFER, VBOVertices);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
-
-	glEnableVertexAttribArray(1);
-	glBindBuffer(GL_ARRAY_BUFFER, VBONormals);
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
-	
-	glEnableVertexAttribArray(2);
-	glBindBuffer(GL_ARRAY_BUFFER, VBOTextureCoordinates);
-	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
-
-    //glEnable(GL_MULTISAMPLE_RASTERIZATION_ALLOWED_EXT); 
     glEnable(GL_DEPTH_TEST); 
     /**
      * End Geometry Definition
      */
 
-    bool show_demo_window = true;
+    bool showProjector = false;
     
     float scale = 1.0f;
     float blend = 0.5f;
@@ -793,35 +885,8 @@ int main()
 
     int halfWidth = WIDTH/2, halfHeight = HEIGHT/2;
 
-    nanort::BVHBuildOptions<float> build_options;  // Use default option
-    build_options.cache_bbox = false;
-
-    printf("  BVH build option:\n");
-    printf("    # of leaf primitives: %d\n", build_options.min_leaf_primitives);
-    printf("    SAH binsize         : %d\n", build_options.bin_size);
-
-    //std::cout << "Vertices size: " << (sizeof(vertices) / sizeof(vertices[0])) << std::endl;
-
-    nanort::TriangleMesh<float> triangle_mesh(mesh.Vertices, mesh.Faces, sizeof(float) * 3);
-    nanort::TriangleSAHPred<float> triangle_pred(mesh.Vertices, mesh.Faces, sizeof(float) * 3);
-
-    printf("num_triangles = %zu\n", mesh.NumOfFaces);
-    printf("faces = %p\n", mesh.Faces);
-
-    nanort::BVHAccel<float> accel;
-    bool ret = accel.Build(mesh.NumOfFaces, triangle_mesh, triangle_pred, build_options);
-    assert(ret);
-
-    nanort::BVHBuildStatistics stats = accel.GetStatistics();
-
-    printf("  BVH statistics:\n");
-    printf("    # of leaf   nodes: %d\n", stats.num_leaf_nodes);
-    printf("    # of branch nodes: %d\n", stats.num_branch_nodes);
-    printf("  Max tree depth     : %d\n", stats.max_tree_depth);
-    float bmin[3], bmax[3];
-    accel.BoundingBox(bmin, bmax);
-    printf("  Bmin               : %f, %f, %f\n", bmin[0], bmin[1], bmin[2]);
-    printf("  Bmax               : %f, %f, %f\n", bmax[0], bmax[1], bmax[2]);
+    // Build the acceleration structure for ray tracing.
+    BuildBVH();
 
     glm::vec3 hitPos = glm::vec3(0.0, 0.0, 0.0);
     glm::vec3 hitNor = glm::vec3(1.0, 1.0, 1.0);
@@ -1013,11 +1078,11 @@ int main()
                     float proportionateHeight = projectorSize * ratio;
 
                     glm::mat4 rotate = glm::mat4(1.0f);
-                    rotate = glm::rotate(rotate, glm::radians(0.0f), projectorDir);
+                    rotate = glm::rotate(rotate, glm::radians(projectorRotation), projectorDir);
 
                     glm::vec4 axis      = rotate * glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
                     projectorView       = glm::lookAt(projectorPos, hitPos, axis.xyz());
-                    projectorProjection = glm::ortho(-projectorSize, projectorSize, -proportionateHeight, proportionateHeight, 0.1f, FAR_PLANE);
+                    projectorProjection = glm::ortho(-projectorSize, projectorSize, -proportionateHeight, proportionateHeight, 0.001f, FAR_PLANE);
 
                     decalProjector = projectorProjection * projectorView;
 
@@ -1038,20 +1103,14 @@ int main()
         ImGui::Begin("Graphical User Interface");   // Pass a pointer to our bool variable (the window will have a closing button that will clear the bool when clicked)
         std::string printTime = std::to_string(deltaTime * 1000.0f) + " ms.\n";
 		ImGui::Text(printTime.c_str());
-        ImGui::SliderFloat("Test", &scale, 1.0f, 100.0f);
-        ImGui::SliderFloat("Blend", &blend, 0.0f, 1.0f);
+        ImGui::SliderFloat("Texture Coordinates Scale", &scale, 1.0f, 100.0f);
+        ImGui::SliderFloat("Blend Factor", &blend, 0.0f, 1.0f);
         ImGui::SliderFloat("Projector Size", &projectorSize, 0.1f, 1.0f);
-        if (ImGui::Button("Click me")) 
+        ImGui::SliderFloat("Projector Orientation", &projectorRotation, 0.0f, 360.0f); 
+        if (ImGui::Button("Show Projector"))      
         {
-            if (click == 0)
-            {
-                click = 1;
-            }
-            else
-            {
-                click = 0;
-            }
-        }        
+            showProjector = !showProjector;
+        }
 
         // for (int i = 0; i < 1; ++i)
         // {
@@ -1088,6 +1147,7 @@ int main()
         geometryPass.setMat4("projection", projection);
         geometryPass.setMat4("view", view);
         geometryPass.setMat4("decalProjector", decalProjector);
+        geometryPass.setFloat("flipAlbedo", (float)flipAlbedo);
         glBindVertexArray(VAO); 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, material.baseColor);
@@ -1121,6 +1181,8 @@ int main()
         decalsPass.setFloat("iFlip", (float)flip);
         decalsPass.setFloat("iBlend", blend);
         decalsPass.setMat4("decalProjector", decalProjector);
+        decalsPass.setFloat("iFlipAlbedo", (float)flipAlbedo);
+        //decalsPass.setFloat("iFlipAlbedo", (float)flipAlbedo);
 
         glBindVertexArray(VAO);
 
@@ -1137,7 +1199,7 @@ int main()
 
         glDrawElements(GL_TRIANGLES, indexes.size(), GL_UNSIGNED_INT, 0);
 
-        if (downloadImage == 1)
+        if (downloadImage == 1 || frame == 0u)
         {
             decalResult = uploadImage();
             // counter = 0;
@@ -1157,6 +1219,7 @@ int main()
         deferredPass.setMat4("model", model);
         deferredPass.setMat4("projection", projection);
         deferredPass.setMat4("view", view);
+        deferredPass.setFloat("iFlipAlbedo", (float)flipAlbedo);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, material.normal);
         glActiveTexture(GL_TEXTURE1);
@@ -1199,16 +1262,19 @@ int main()
         // hitPosition.setMat4("view",       view);
         // renderCube();
 
-        // glm::mat4 modelFrustum = glm::mat4(1.0f);
+        if (showProjector)
+        {
+            glm::mat4 modelFrustum = glm::mat4(1.0f);
 
-        // glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        // glEnable(GL_DEPTH_TEST);
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glEnable(GL_DEPTH_TEST);
 
-        // hitPosition.use();
-        // hitPosition.setMat4("model",      modelFrustum);
-        // hitPosition.setMat4("projection", projection);
-        // hitPosition.setMat4("view",       view);
-        // renderFrustum(decalProjector);
+            hitPosition.use();
+            hitPosition.setMat4("model",      modelFrustum);
+            hitPosition.setMat4("projection", projection);
+            hitPosition.setMat4("view",       view);
+            renderFrustum(decalProjector);
+        }
 
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -1235,6 +1301,9 @@ int main()
     delete[] mesh.Vertices;
     //delete[] mesh.Normals;
     delete[] mesh.Faces;
+    delete newVertices;
+    delete newNormals;
+    delete newTextureCoords;
 
     return EXIT_SUCCESS;
 }

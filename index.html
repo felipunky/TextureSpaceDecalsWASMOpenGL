@@ -80,7 +80,6 @@
                     ccallArrays("passSizeAlbedo", null, ["array"], [sizeData], {heapIn: "HEAPU16"});
                     ccallArrays("loadAlbedo", null, ["array"], [imageData], {heapIn: "HEAPU8"});
                     //previewCanvasContext.clearRect(0, 0, cv.width, cv.height);
-                    flipAlbedo = 0;
                     sizeData[2] = clicked;
                     console.log("You are loading the Albedo texture...");
                 })
@@ -139,7 +138,15 @@
                     dataImage.data[i] = val;
                     });
                 }
-                flip(dataImage, ctx);
+                if (flipAlbedo == 0)
+                {
+                    flip(dataImage, ctx);
+                }
+                else
+                {
+                    ctx.putImageData(dataImage, 0,0);
+                    ctx.drawImage(cvDrawImg, 0,0);
+                }
             };
 
             downloadImage = 0;

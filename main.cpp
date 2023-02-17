@@ -33,9 +33,9 @@
 const int WIDTH  = 800,
           HEIGHT = 600;
 
-float* newVertices;
-float* newNormals;
-float* newTextureCoords;
+//float* newVertices;
+//float* newNormals;
+//float* newTextureCoords;
 int newVerticesSize;
 int flipAlbedo = 0;
 uint8_t reload = 0u;
@@ -528,9 +528,9 @@ void ObjLoader(std::string inputFile)
     modelDataNormals.clear();
     modelDataTextureCoordinates.clear();
     indexes.clear();
-    delete[] mesh.Vertices;
+    //delete[] mesh.Vertices;
     //delete[] mesh.Normals;
-    delete[] mesh.Faces;
+    //delete[] mesh.Faces;
 
     std::istringstream stream;
     if (inputFile == "Assets/t-shirt-lp/source/Shirt.obj")
@@ -601,11 +601,11 @@ void ObjLoader(std::string inputFile)
         }
     }
 
-    mesh.NumOfFaces    = indexes.size() / 3;
-    mesh.NumOfVertices = modelDataVertices.size();
-    mesh.Vertices      = &modelDataVertices[0][0];
+    //mesh.NumOfFaces    = indexes.size() / 3;
+    //mesh.NumOfVertices = modelDataVertices.size();
+    //mesh.Vertices      = glm::value_ptr(modelDataVertices[0]);
     //mesh.Normals       = &modelDataNormals[0][0];
-    mesh.Faces         = &indexes[0];
+    //mesh.Faces         = &indexes[0];
 
     std::cout << "Vertices: " << modelDataVertices.size() << "\n";
     std::cout << "Normals: " << modelDataNormals.size() << "\n";
@@ -623,7 +623,7 @@ void CreateBOs()
     glGenBuffers(1, &VBOVertices);
 	glBindBuffer(GL_ARRAY_BUFFER, VBOVertices);
     glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec3) * modelDataVertices.size(), modelDataVertices.data(), GL_STATIC_DRAW);
-    modelDataVertices.clear();
+    //modelDataVertices.clear();
 
 	glGenBuffers(1, &VBONormals);
 	glBindBuffer(GL_ARRAY_BUFFER, VBONormals);
@@ -633,7 +633,7 @@ void CreateBOs()
 	glGenBuffers(1, &VBOTextureCoordinates);
 	glBindBuffer(GL_ARRAY_BUFFER, VBOTextureCoordinates);
     glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec2) * modelDataTextureCoordinates.size(), modelDataTextureCoordinates.data(), GL_STATIC_DRAW);
-    modelDataTextureCoordinates.clear();
+    //modelDataTextureCoordinates.clear();
 
     glGenBuffers(1, &EBO);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
@@ -668,26 +668,29 @@ void BuildBVH()
 
     //std::cout << "Vertices size: " << (sizeof(vertices) / sizeof(vertices[0])) << std::endl;
 
-    nanort::TriangleMesh<float> triangle_mesh(mesh.Vertices, mesh.Faces, sizeof(float) * 3);
-    nanort::TriangleSAHPred<float> triangle_pred(mesh.Vertices, mesh.Faces, sizeof(float) * 3);
+    nanort::TriangleMesh<float> triangle_mesh(glm::value_ptr(modelDataVertices[0]), &indexes[0], sizeof(float) * 3);
+    nanort::TriangleSAHPred<float> triangle_pred(glm::value_ptr(modelDataVertices[0]), &indexes[0], sizeof(float) * 3);
 
-    printf("num_triangles = %zu\n", mesh.NumOfFaces);
-    printf("faces = %p\n", mesh.Faces);
+    //printf("num_triangles = %zu\n", modelDataVertices.size() / 3);
+    //printf("faces = %p\n", indexes.size());
 
-    //nanort::BVHAccel<float> accel;
-    bool ret = accel.Build(mesh.NumOfFaces, triangle_mesh, triangle_pred, build_options);
+    accel = nanort::BVHAccel<float>();
+
+    nanort::BVHAccel<float> accelDummy;
+    bool ret = accelDummy.Build(indexes.size() / 3, triangle_mesh, triangle_pred, build_options);
     assert(ret);
 
-    nanort::BVHBuildStatistics stats = accel.GetStatistics();
+    nanort::BVHBuildStatistics stats = accelDummy.GetStatistics();
 
     printf("  BVH statistics:\n");
     printf("    # of leaf   nodes: %d\n", stats.num_leaf_nodes);
     printf("    # of branch nodes: %d\n", stats.num_branch_nodes);
     printf("  Max tree depth     : %d\n", stats.max_tree_depth);
     float bmin[3], bmax[3];
-    accel.BoundingBox(bmin, bmax);
+    accelDummy.BoundingBox(bmin, bmax);
     printf("  Bmin               : %f, %f, %f\n", bmin[0], bmin[1], bmin[2]);
     printf("  Bmax               : %f, %f, %f\n", bmax[0], bmax[1], bmax[2]);
+    accel = accelDummy;
 }
 
 void reloadObj()
@@ -929,6 +932,7 @@ int main()
          * Start ImGui
          */	        
         float camSpeed = deltaTime * SPEED;
+        bool shiftIsPressed = false;
         SDL_Event event;
         while (SDL_PollEvent(&event))
         {
@@ -993,6 +997,7 @@ int main()
             Uint32 buttons;
             buttons = SDL_GetMouseState(&mousePositionX, &mousePositionY);
             mouse = glm::vec3(mousePositionX, -mousePositionY + screenHeight, (clicked ? 1.0f : 0.0f));
+
 			if ((buttons & SDL_BUTTON_LMASK) != 0) 
 			{
 				clicked = true;
@@ -1060,7 +1065,7 @@ int main()
                 ray.min_t = 0.0f;
                 ray.max_t = kFar;
 
-                nanort::TriangleIntersector<> triangle_intersector(mesh.Vertices, mesh.Faces, sizeof(float) * 3);
+                nanort::TriangleIntersector<> triangle_intersector(glm::value_ptr(modelDataVertices[0]), &indexes[0], sizeof(float) * 3);
                 nanort::TriangleIntersection<> isect;
                 bool hit = accel.Traverse(ray, triangle_intersector, &isect);
                 if (hit)
@@ -1298,12 +1303,12 @@ int main()
     ImGui::DestroyContext();
     modelDataNormals.clear();
     indexes.clear();
-    delete[] mesh.Vertices;
+    //delete[] mesh.Vertices;
     //delete[] mesh.Normals;
-    delete[] mesh.Faces;
-    delete newVertices;
-    delete newNormals;
-    delete newTextureCoords;
+    //delete[] mesh.Faces;
+    //delete newVertices;
+    //delete newNormals;
+    //delete newTextureCoords;
 
     return EXIT_SUCCESS;
 }

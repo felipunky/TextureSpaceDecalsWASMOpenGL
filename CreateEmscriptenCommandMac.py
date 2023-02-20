@@ -11,6 +11,7 @@ imguiBackendPath = imguiPath + "backends/"
 brewPath = "/usr/local/include"
 stbPath = "/Users/felipe/Documents/Graphics/stb/stb/"
 tinyObjLoaderPath = "/Users/felipe/Documents/Graphics/tinyobjloader/tinyobjloader/"
+tinyGLTFPath = "/Users/felipe/Documents/Graphics/tinygltf/"
 currentPath = str(Path().absolute())
 shaderPath = currentPath + "/Shaders@/Shaders"
 assetsPath = currentPath + "/Assets@/Assets"
@@ -45,8 +46,8 @@ emscriptenCommand = "emcc " + \
                     "-I" + imguiBackendPath + " " + \
                     "-I" + imGuizmoPath + " " + \
                     "-I" + brewPath + " " + \
-                    "-I" + stbPath + " " + \
                     "-I" + tinyObjLoaderPath + " " + \
+                    "-I" + tinyGLTFPath + " " + \
                     "-I" + nanoRTPath + \
                     "-v --embed-file " + shaderPath + " " + \
                     "-v --preload-file " + assetsPath + " " + \

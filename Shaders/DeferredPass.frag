@@ -98,7 +98,7 @@ void main()
     for(int i = 0; i < 1; ++i) 
     {
         // calculate per-light radiance
-        vec3 light = vec3(sin(iTime), 8.0, cos(iTime));
+        vec3 light = vec3(3.*sin(iTime), 10.0, -5.*cos(iTime));
         vec3 L = normalize(light - FragPos);//normalize(lightPositions[i] - WorldPos);
         vec3 H = normalize(V + L);
         float distance = length(light - FragPos);

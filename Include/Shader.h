@@ -22,8 +22,13 @@
 #include <glm/gtx/hash.hpp>
 #include <glm/gtx/string_cast.hpp>
 
-#define STB_IMAGE_IMPLEMENTATION    
-#include "stb_image.h"
+#define TINYGLTF_IMPLEMENTATION
+#define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+// #include "stb_image.h"
+#define TINYGLTF_NOEXCEPTION
+#define JSON_NOEXCEPTION
+#include "tiny_gltf.h"
 
 // Shader class taken from, there are some functions that are implemented by me: 
 // https://learnopengl.com/code_viewer_gh.php?code=includes/learnopengl/shader_m.h

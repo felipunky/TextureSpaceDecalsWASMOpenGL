@@ -210,17 +210,6 @@ float     projectorRotation = 0.0f;
 
 int lastUsing = 0;
 
-struct Mesh
-{
-    size_t NumOfFaces;
-    size_t NumOfVertices;
-    float* Vertices;
-    float* Normals;
-    unsigned int* Faces;
-};
-
-Mesh mesh;
-
 const glm::vec4 kFrustumCorners[] = {
     glm::vec4(-1.0f, -1.0f, 1.0f, 1.0f),  // Far-Bottom-Left
     glm::vec4(-1.0f, 1.0f, 1.0f, 1.0f),   // Far-Top-Left
@@ -615,6 +604,112 @@ void ObjLoader(std::string inputFile)
     std::cout << "BboxMin: {x: " << bboxMin.x << ", y: " << bboxMin.y << ", z: " << bboxMin.z << "}\n";
 }
 
+bool loadModel(tinygltf::Model &model, const char *filename) {
+  tinygltf::TinyGLTF loader;
+  std::string err;
+  std::string warn;
+
+  bool res = loader.LoadASCIIFromFile(&model, &err, &warn, filename);
+  if (!warn.empty()) {
+    std::cout << "WARN: " << warn << std::endl;
+  }
+
+  if (!err.empty()) {
+    std::cout << "ERR: " << err << std::endl;
+  }
+
+  if (!res)
+    std::cout << "Failed to load glTF: " << filename << std::endl;
+  else
+    std::cout << "Loaded glTF: " << filename << std::endl;
+
+  return res;
+}
+
+const float* GetDataFromAccessorGLTF(const tinygltf::Model &model, const tinygltf::Accessor& accessor)
+{
+    const tinygltf::BufferView& bufferView = model.bufferViews[accessor.bufferView];
+    // cast to float type read only. Use accessor and bufview byte offsets to determine where position data 
+    // is located in the buffer.
+    const tinygltf::Buffer& buffer = model.buffers[bufferView.buffer];
+    // bufferView byteoffset + accessor byteoffset tells you where the actual position data is within the buffer. From there
+    // you should already know how the data needs to be interpreted.
+    const float* result = reinterpret_cast<const float*>(&buffer.data[bufferView.byteOffset + accessor.byteOffset]);
+    return result;
+}
+
+void loadGLTF(tinygltf::Model &model) 
+{
+    bboxMin = glm::vec3(1e+5);
+    bboxMax = glm::vec3(-1e+5);   
+    modelDataVertices.clear();
+    modelDataNormals.clear();
+    modelDataTextureCoordinates.clear();
+    indexes.clear();
+
+    std::unordered_map<std::bitset<256>, uint32_t> uniqueVertices;
+    uint32_t counter = 0;
+
+    for (auto &mesh : model.meshes) 
+    {
+        std::cout << "mesh : " << mesh.name << std::endl;
+        for (auto &primitive : mesh.primitives) 
+        {
+            // Positions.
+            const tinygltf::Accessor& accessorPos = model.accessors[primitive.attributes["POSITION"]];
+            // Normals.
+            const tinygltf::Accessor& accessorNor = model.accessors[primitive.attributes["NORMAL"]];
+            // Texture coordinates.
+            const tinygltf::Accessor& accessorTex = model.accessors[primitive.attributes["TEXCOORD_0"]];
+            std::cout << "Position count: "            << accessorPos.count << std::endl;
+            std::cout << "Normal count: "              << accessorNor.count << std::endl;
+            std::cout << "Texture Coordinates count: " << accessorTex.count << std::endl;
+
+            const float* positions = GetDataFromAccessorGLTF(model, accessorPos);
+            const float* normals   = GetDataFromAccessorGLTF(model, accessorNor);
+            const float* texCoords = GetDataFromAccessorGLTF(model, accessorTex);
+            // From here, you choose what you wish to do with this position data. In this case, we  will display it out.
+            for (size_t i = 0; i < accessorPos.count; ++i) 
+            {
+                glm::vec3 position{
+                    positions[3 * i + 0],
+                    positions[3 * i + 1],
+                    positions[3 * i + 2]};
+                glm::vec3 normal{
+                    normals[3 * i + 0],
+                    normals[3 * i + 1],
+                    normals[3 * i + 2]};
+                glm::vec2 textureCoordinates{
+                    texCoords[2 * i + 0],
+                    texCoords[2 * i + 1]};
+                auto hash = VertexBitHash(&position, &normal, &textureCoordinates);
+                if (uniqueVertices.count(hash) == 0)
+                {
+                    modelDataVertices.push_back(position);
+                    modelDataNormals.push_back(normal);
+                    modelDataTextureCoordinates.push_back(textureCoordinates);
+                    // BBox
+                    bboxMax = glm::max(bboxMax, position);
+                    bboxMin = glm::min(bboxMin, position);
+                    indexes.push_back(counter);
+                    uniqueVertices[hash] = counter;
+                    ++counter;
+                }
+                else
+                {
+                    indexes.push_back(uniqueVertices[hash]);
+                }
+            }
+        }
+    }
+    std::cout << "Vertices: " << modelDataVertices.size() << "\n";
+    std::cout << "Normals: " << modelDataNormals.size() << "\n";
+    std::cout << "Texture Coordinates: " << modelDataTextureCoordinates.size() << "\n";
+    //std::cout << "Materials: " << materials.size() << "\n";
+    std::cout << "BboxMax: {x: " << bboxMax.x << ", y: " << bboxMax.y << ", z: " << bboxMax.z << "}\n";
+    std::cout << "BboxMin: {x: " << bboxMin.x << ", y: " << bboxMin.y << ", z: " << bboxMin.z << "}\n";
+}
+
 void CreateBOs()
 {
     // Create a Vertex Buffer Object and copy the vertex data to it
@@ -787,7 +882,23 @@ int main()
     Shader hitPosition   = Shader("Shaders/HitPosition.vert",  "Shaders/HitPosition.frag");
     Shader decalsPass    = Shader("Shaders/Decals.vert",       "Shaders/Decals.frag");
     
-    ObjLoader("Assets/t-shirt-lp/source/Shirt.obj");
+    //ObjLoader("Assets/t-shirt-lp/source/Shirt.obj");
+
+    std::string fileName = "Assets/t-shirt-lp/source/Shirt.gltf";
+
+    /**
+     * Start Read GLTF
+     */
+    tinygltf::Model modelGLTF;
+    if (!loadModel(modelGLTF, fileName.c_str()))
+    {
+        throw std::runtime_error("load GLTF Error!");
+    }
+
+    loadGLTF(modelGLTF);
+    /**
+     * End Read GLFT
+     */
 
     geometryPass.use();
 

@@ -26,10 +26,10 @@ void main()
     gNormal = normalize(texture(Normal, texCoords).xyz);
     // and the diffuse per-fragment color
     vec2 texCoordsAlbedo = texCoords;
-    if (flipAlbedo == 1.)
+    //if (flipAlbedo == 1.)
     {
         texCoordsAlbedo.y = 1. - texCoordsAlbedo.y;
-        //gPosition.y = 1. - gPosition.y;
+        gPosition.y = 1. - gPosition.y;
     }
     gAlbedo = texture(BaseColor, texCoordsAlbedo).rgb;
     gMetallic = texture(Metallic, texCoords).rgb;

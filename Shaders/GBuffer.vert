@@ -13,7 +13,7 @@ uniform mat4 projection;
 uniform mat4 decalProjector;                                 
 void main()                                                
 {                
-  texCoords = VertexTextureCoords;     
+  texCoords = VertexTextureCoords; 
   mat3 normalMatrix = transpose(inverse(mat3(model)));
   normals = normalMatrix * VertexNormals;                         
   vec4 worldPos = model * vec4(VertexPosition.xyz, 1.0);

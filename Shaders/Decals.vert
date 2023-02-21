@@ -18,7 +18,7 @@ void main()
   WorldPos = (decalProjector * objPos).xyz * 0.5 + 0.5;
   TexCoords = VertexTextureCoords;
   vec4 Position = vec4(VertexTextureCoords, 0., 1.);
-  if (iFlipAlbedo == 1.)
+  //if (iFlipAlbedo == 1.)
   {
     Position.y = 1. - Position.y;
     TexCoords.y = 1. - TexCoords.y;

@@ -76,7 +76,7 @@ void main()
 {             
     vec3 FragPos    = positions;//texture(gPosition, TexCoords).xyz;
     vec2 texCoordsAlbedo = TexCoords;
-    if (iFlipAlbedo == 1.0)
+    //if (iFlipAlbedo == 1.0)
     {
         texCoordsAlbedo.y = 1. - texCoordsAlbedo.y;
     }
@@ -142,5 +142,5 @@ void main()
     color = color / (color + vec3(1.0));
     // gamma correct
     color = pow(color, vec3(1.0/2.2)); 
-    FragColor = vec4(color, 1.0);
+    FragColor = vec4(albedo, 1.0);
 }

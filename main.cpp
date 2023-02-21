@@ -16,6 +16,7 @@
 
 #include <chrono>
 #include "Include/Shader.h"
+#include "Include/OpenGLTF.h"
 
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"
@@ -649,11 +650,62 @@ void loadGLTF(tinygltf::Model &model)
 
     std::unordered_map<std::bitset<256>, uint32_t> uniqueVertices;
     uint32_t counter = 0;
+    int primCounter = 0;
+
+    std::vector<unsigned int> _u32Buffer;
+    std::vector<unsigned short> _u16Buffer;
+    std::vector<unsigned char> _u8Buffer;
 
     for (auto &mesh : model.meshes) 
     {
         std::cout << "mesh : " << mesh.name << std::endl;
-        for (auto &primitive : mesh.primitives) 
+
+        for (const auto& prim : mesh.primitives)
+        {
+
+            bool result = GLTF::GetAttributes<glm::vec3>(model, prim, modelDataVertices, "POSITION");
+                 result = GLTF::GetAttributes<glm::vec3>(model, prim, modelDataNormals, "NORMAL");
+                 result = GLTF::GetAttributes<glm::vec2>(model, prim, modelDataTextureCoordinates, "TEXCOORD_0");
+
+            if (prim.indices > -1)
+            {
+                const tinygltf::Accessor& indexAccessor = model.accessors[prim.indices];
+                const tinygltf::BufferView& bufferView = model.bufferViews[indexAccessor.bufferView];
+                const tinygltf::Buffer& buffer = model.buffers[bufferView.buffer];
+
+                switch (indexAccessor.componentType)
+                {
+                case TINYGLTF_PARAMETER_TYPE_UNSIGNED_INT:
+                    _u32Buffer.resize(indexAccessor.count);
+                    std::memcpy(&_u32Buffer[0], &buffer.data[indexAccessor.byteOffset + bufferView.byteOffset], indexAccessor.count * sizeof(unsigned int));
+                    indexes.insert(indexes.end(), std::make_move_iterator(_u32Buffer.begin()), std::make_move_iterator(_u32Buffer.end()));
+                    break;
+                case TINYGLTF_PARAMETER_TYPE_UNSIGNED_SHORT:
+                    _u16Buffer.resize(indexAccessor.count);
+                    std::memcpy(&_u16Buffer[0], &buffer.data[indexAccessor.byteOffset + bufferView.byteOffset], indexAccessor.count * sizeof(unsigned short));
+                    indexes.insert(indexes.end(), std::make_move_iterator(_u16Buffer.begin()), std::make_move_iterator(_u16Buffer.end()));
+                    break;
+                case TINYGLTF_PARAMETER_TYPE_UNSIGNED_BYTE:
+                    _u8Buffer.resize(indexAccessor.count);
+                    std::memcpy(&_u8Buffer[0], &buffer.data[indexAccessor.byteOffset + bufferView.byteOffset], indexAccessor.count * sizeof(unsigned char));
+                    indexes.insert(indexes.end(), std::make_move_iterator(_u8Buffer.begin()), std::make_move_iterator(_u8Buffer.end()));
+                    break;
+                default:
+                    std::cerr << "Unknown index component type : " << indexAccessor.componentType << " is not supported" << std::endl;
+                    return;
+                }
+            }
+            else
+            {
+                //! Primitive without indices, creating them
+                const auto& accessor = model.accessors[prim.attributes.find("POSITION")->second];
+                for (unsigned int i = 0; i < accessor.count; ++i)
+                    indexes.push_back(i);
+            }
+
+        }
+
+        /*for (auto &primitive : mesh.primitives) 
         {
             // Positions.
             const tinygltf::Accessor& accessorPos = model.accessors[primitive.attributes["POSITION"]];
@@ -700,7 +752,33 @@ void loadGLTF(tinygltf::Model &model)
                     indexes.push_back(uniqueVertices[hash]);
                 }
             }
-        }
+
+            // const tinygltf::Accessor &indexAccessor =
+            // model.accessors[primitive.indices];
+
+            // std::cout << "indexaccessor: count " << indexAccessor.count << ", type "
+            //             << indexAccessor.componentType << std::endl;
+
+            // tinygltf::Material &mat = model.materials[primitive.material];
+            // for (auto &mats : mat.values) {
+            //     std::cout << "mat : " << mats.first.c_str() << std::endl;
+            // }
+
+            // for (auto &image : model.images) {
+            //     std::cout << "image name : " << image.uri << std::endl;
+            //     std::cout << "  size : " << image.image.size() << std::endl;
+            //     std::cout << "  w/h : " << image.width << "/" << image.height
+            //             << std::endl;
+            // }
+
+            // std::cout << "indices : " << primitive.indices << std::endl;
+            // std::cout << "mode     : "
+            //             << "(" << primitive.mode << ")" << std::endl;
+
+            // for (auto &attrib : primitive.attributes) {
+            //     std::cout << "attribute : " << attrib.first.c_str() << std::endl;
+            // }
+        }*/
     }
     std::cout << "Vertices: " << modelDataVertices.size() << "\n";
     std::cout << "Normals: " << modelDataNormals.size() << "\n";
@@ -708,6 +786,10 @@ void loadGLTF(tinygltf::Model &model)
     //std::cout << "Materials: " << materials.size() << "\n";
     std::cout << "BboxMax: {x: " << bboxMax.x << ", y: " << bboxMax.y << ", z: " << bboxMax.z << "}\n";
     std::cout << "BboxMin: {x: " << bboxMin.x << ", y: " << bboxMin.y << ", z: " << bboxMin.z << "}\n";
+
+    _u8Buffer.clear();
+    _u16Buffer.clear();
+    _u32Buffer.clear();
 }
 
 void CreateBOs()

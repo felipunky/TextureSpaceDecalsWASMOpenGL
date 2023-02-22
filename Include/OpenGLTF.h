@@ -80,4 +80,15 @@ namespace GLTF
 
 		return true;
 	}
+	bool GetGLTFModel(tinygltf::Model* model, const std::vector<unsigned char>& data)
+	{
+		std::string err, warn;
+		std::string basedir = "";
+
+		tinygltf::TinyGLTF t;
+
+		bool result = t.LoadASCIIFromString(model, &err, &warn, reinterpret_cast<const char *>(&data.at(0)), 
+										    static_cast<unsigned int>(data.size()), basedir, tinygltf::REQUIRE_VERSION);
+		return result;
+	}
 }

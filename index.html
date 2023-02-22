@@ -193,6 +193,21 @@
                 ccall("passObj", "null", ["number"], [buffer]);
             }
 
+            // GLTF Input
+            const gltfInput = document.getElementById("uploadGLTF");
+            gltfInput.addEventListener("change", () =>{
+                readGLTFFile(event.target.files[0]);
+            });
+
+            async function readGLTFFile(file)
+            {
+                const text = await file.text();
+
+                var buffer = _malloc(text.length + 1);
+                stringToUTF8(text, buffer, text.length + 1);
+                ccall("passGLTF", "null", ["number"], [buffer]);
+            }
+
             document.getElementById('download').addEventListener("click", function(e) 
             {
                 ViewTexture();
@@ -251,8 +266,10 @@
 <button style="display: inline; height:30px;" onclick="document.getElementById('fileInput').click()">Choose Image for Decal</button>
 <button style="display: inline; height:30px;" onclick="document.getElementById('uploadAlbedo').click()">Choose Image for Albedo</button>
 <input id="fileInput" style="display:none" type="file" accept="image/*" value="./image.png">
-<button style="display: inline; height:30px;" onclick="document.getElementById('uploadMesh').click()">Choose New Mesh</button>
+<button style="display: inline; height:30px;" onclick="document.getElementById('uploadMesh').click()">Choose OBJ</button>
+<button style="display: inline; height:30px;" onclick="document.getElementById('uploadGLTF').click()">Choose GLTF</button>
 <input id="uploadMesh" style="display:none" type="file" accept=".obj">
+<input id="uploadGLTF" style="display:none" type="file" accept=".gltf">
 <input id="uploadAlbedo" style="display:none" type="file" accept="image/*" value="./image.png">
 <button id="download">Download</button>
 </html>

@@ -30,6 +30,9 @@
 
 #define PROJECTOR_DISTANCE 50.0f
 #define FAR_PLANE 1000.0F
+#if 1
+    #define PILOT_SHIRT
+#endif
 
 const int WIDTH  = 800,
           HEIGHT = 600;
@@ -76,8 +79,9 @@ std::vector<uint8_t> loadArray(uint8_t* buf, int bufSize)
     return newBuf;
 }
 
-void reloadObj();
+void reloadModel();
 void ObjLoader(std::string inputFile);
+void loadGLTF(tinygltf::Model &model);
 
 struct Material
 {
@@ -93,12 +97,29 @@ Material material;
 extern "C"
 {
     EMSCRIPTEN_KEEPALIVE
+    void passGLTF(char* buf)
+    {
+        std::string result = buf;
+        tinygltf::Model model;
+        std::vector<unsigned char> data(result.begin(), result.end());
+        bool res = GLTF::GetGLTFModel(&model, data);
+        if (!res)
+        {
+            throw std::runtime_error("Unable to read GLTF!");
+        }
+        loadGLTF(model);
+        reloadModel();
+
+        data.clear();
+        free(buf);
+    }
+    EMSCRIPTEN_KEEPALIVE
     void passObj(char* buf)
     {
         //std::cout << "New mesh content: " << buf << std::endl;
         std::string result = buf;
         ObjLoader(result);
-        reloadObj();
+        reloadModel();
         free(buf);
     }
     EMSCRIPTEN_KEEPALIVE
@@ -704,81 +725,6 @@ void loadGLTF(tinygltf::Model &model)
             }
 
         }
-
-        /*for (auto &primitive : mesh.primitives) 
-        {
-            // Positions.
-            const tinygltf::Accessor& accessorPos = model.accessors[primitive.attributes["POSITION"]];
-            // Normals.
-            const tinygltf::Accessor& accessorNor = model.accessors[primitive.attributes["NORMAL"]];
-            // Texture coordinates.
-            const tinygltf::Accessor& accessorTex = model.accessors[primitive.attributes["TEXCOORD_0"]];
-            std::cout << "Position count: "            << accessorPos.count << std::endl;
-            std::cout << "Normal count: "              << accessorNor.count << std::endl;
-            std::cout << "Texture Coordinates count: " << accessorTex.count << std::endl;
-
-            const float* positions = GetDataFromAccessorGLTF(model, accessorPos);
-            const float* normals   = GetDataFromAccessorGLTF(model, accessorNor);
-            const float* texCoords = GetDataFromAccessorGLTF(model, accessorTex);
-            // From here, you choose what you wish to do with this position data. In this case, we  will display it out.
-            for (size_t i = 0; i < accessorPos.count; ++i) 
-            {
-                glm::vec3 position{
-                    positions[3 * i + 0],
-                    positions[3 * i + 1],
-                    positions[3 * i + 2]};
-                glm::vec3 normal{
-                    normals[3 * i + 0],
-                    normals[3 * i + 1],
-                    normals[3 * i + 2]};
-                glm::vec2 textureCoordinates{
-                    texCoords[2 * i + 0],
-                    texCoords[2 * i + 1]};
-                auto hash = VertexBitHash(&position, &normal, &textureCoordinates);
-                if (uniqueVertices.count(hash) == 0)
-                {
-                    modelDataVertices.push_back(position);
-                    modelDataNormals.push_back(normal);
-                    modelDataTextureCoordinates.push_back(textureCoordinates);
-                    // BBox
-                    bboxMax = glm::max(bboxMax, position);
-                    bboxMin = glm::min(bboxMin, position);
-                    indexes.push_back(counter);
-                    uniqueVertices[hash] = counter;
-                    ++counter;
-                }
-                else
-                {
-                    indexes.push_back(uniqueVertices[hash]);
-                }
-            }
-
-            // const tinygltf::Accessor &indexAccessor =
-            // model.accessors[primitive.indices];
-
-            // std::cout << "indexaccessor: count " << indexAccessor.count << ", type "
-            //             << indexAccessor.componentType << std::endl;
-
-            // tinygltf::Material &mat = model.materials[primitive.material];
-            // for (auto &mats : mat.values) {
-            //     std::cout << "mat : " << mats.first.c_str() << std::endl;
-            // }
-
-            // for (auto &image : model.images) {
-            //     std::cout << "image name : " << image.uri << std::endl;
-            //     std::cout << "  size : " << image.image.size() << std::endl;
-            //     std::cout << "  w/h : " << image.width << "/" << image.height
-            //             << std::endl;
-            // }
-
-            // std::cout << "indices : " << primitive.indices << std::endl;
-            // std::cout << "mode     : "
-            //             << "(" << primitive.mode << ")" << std::endl;
-
-            // for (auto &attrib : primitive.attributes) {
-            //     std::cout << "attribute : " << attrib.first.c_str() << std::endl;
-            // }
-        }*/
     }
     std::cout << "Vertices: " << modelDataVertices.size() << "\n";
     std::cout << "Normals: " << modelDataNormals.size() << "\n";
@@ -790,6 +736,8 @@ void loadGLTF(tinygltf::Model &model)
     _u8Buffer.clear();
     _u16Buffer.clear();
     _u32Buffer.clear();
+
+    flipAlbedo = 1;
 }
 
 void CreateBOs()
@@ -870,7 +818,7 @@ void BuildBVH()
     accel = accelDummy;
 }
 
-void reloadObj()
+void reloadModel()
 {
     BuildBVH();
     CreateBOs();
@@ -966,8 +914,11 @@ int main()
     
     //ObjLoader("Assets/t-shirt-lp/source/Shirt.obj");
 
+    #ifdef PILOT_SHIRT
+    std::string fileName = "Assets/Pilot/shirt_1.gltf";
+    #else
     std::string fileName = "Assets/t-shirt-lp/source/Shirt.gltf";
-
+    #endif
     /**
      * Start Read GLTF
      */
@@ -984,11 +935,23 @@ int main()
 
     geometryPass.use();
 
+    #ifdef PILOT_SHIRT
+
+    geometryPass.createTexture(&(material.normal), "Assets/t-shirt-lp/textures/T_shirt_normal.png", "Normal", 1);
+    geometryPass.createTexture(&(material.roughness), "Assets/t-shirt-lp/textures/T_shirt_roughness.jpg", "Roughness", 2);
+    geometryPass.createTexture(&(material.metallic), "Assets/Textures/rustediron1-alt2-Unreal-Engine/rustediron2_metallic.png", "Metallic", 3);
+    geometryPass.createTexture(&(material.ao), "Assets/t-shirt-lp/textures/T_shirt_AO.jpg", "AmbientOcclussion", 4);
+    geometryPass.createTexture(&(material.baseColor), "Assets/Pilot/textures/T_DefaultMaterial_B.jpg", "BaseColor", 0);
+
+    #else
+
     geometryPass.createTexture(&(material.normal), "Assets/t-shirt-lp/textures/T_shirt_normal.png", "Normal", 1);
     geometryPass.createTexture(&(material.roughness), "Assets/t-shirt-lp/textures/T_shirt_roughness.jpg", "Roughness", 2);
     geometryPass.createTexture(&(material.metallic), "Assets/Textures/rustediron1-alt2-Unreal-Engine/rustediron2_metallic.png", "Metallic", 3);
     geometryPass.createTexture(&(material.ao), "Assets/t-shirt-lp/textures/T_shirt_AO.jpg", "AmbientOcclussion", 4);
     geometryPass.createTexture(&(material.baseColor), "Assets/t-shirt-lp/textures/T_shirt_albedo.jpg", "BaseColor", 0);
+
+    #endif
 
     unsigned int gBuffer;
     glGenFramebuffers(1, &gBuffer);
@@ -1296,7 +1259,7 @@ int main()
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
-        //ImGuizmo::BeginFrame();
+        // ImGuizmo::BeginFrame();
 
         ImGui::Begin("Graphical User Interface");   // Pass a pointer to our bool variable (the window will have a closing button that will clear the bool when clicked)
         std::string printTime = std::to_string(deltaTime * 1000.0f) + " ms.\n";

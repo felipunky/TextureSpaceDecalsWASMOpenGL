@@ -10,14 +10,22 @@ out vec2 texCoords;
 uniform mat4 model;                                        
 uniform mat4 view;                                         
 uniform mat4 projection;  
-uniform mat4 decalProjector;                                 
+uniform mat4 decalProjector;          
+
+mat2 rot(const in float a)
+{
+  vec2 sinCos = vec2(sin(a), cos(a));
+  return mat2(sinCos.y, -sinCos.x,
+              sinCos.x,  sinCos.y);
+}
+
 void main()                                                
 {                
   texCoords = VertexTextureCoords; 
   mat3 normalMatrix = transpose(inverse(mat3(model)));
-  normals = normalMatrix * VertexNormals;                         
-  vec4 worldPos = model * vec4(VertexPosition.xyz, 1.0);
-  vec4 objPos = projection * view * worldPos;      
+  normals = normalMatrix * VertexNormals;        
+  vec4 worldPos = model * vec4(VertexPosition.xyz, 1.);    
+  vec4 objPos = projection * view * worldPos;    
   positions = objPos.xyz;
   gl_Position = decalProjector * vec4(VertexPosition, 1.0);              
 }                                                      

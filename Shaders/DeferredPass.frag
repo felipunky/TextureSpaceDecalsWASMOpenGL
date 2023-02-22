@@ -76,7 +76,7 @@ void main()
 {             
     vec3 FragPos    = positions;//texture(gPosition, TexCoords).xyz;
     vec2 texCoordsAlbedo = TexCoords;
-    //if (iFlipAlbedo == 1.0)
+    if (iFlipAlbedo == 1.0)
     {
         texCoordsAlbedo.y = 1. - texCoordsAlbedo.y;
     }

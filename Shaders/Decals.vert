@@ -10,7 +10,8 @@ uniform mat4 model;
 uniform mat4 view;                                         
 uniform mat4 projection;  
 uniform mat4 decalProjector; 
-uniform float iFlipAlbedo;     
+uniform float iFlipAlbedo;  
+uniform int iFlipper;   
 
 void main()                                                
 {                                     
@@ -21,6 +22,10 @@ void main()
   if (iFlipAlbedo == 1.)
   {
     Position.y = 1. - Position.y;
+    TexCoords.y = 1. - TexCoords.y;
+  }
+  if (iFlipper == 1)
+  {
     TexCoords.y = 1. - TexCoords.y;
   }
   Position.xy = Position.xy * 2. - 1.;

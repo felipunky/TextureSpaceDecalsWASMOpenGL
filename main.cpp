@@ -94,6 +94,8 @@ struct Material
 
 Material material;
 
+bool isGLTF = false;
+
 extern "C"
 {
     EMSCRIPTEN_KEEPALIVE
@@ -109,7 +111,7 @@ extern "C"
         }
         loadGLTF(model);
         reloadModel();
-
+        isGLTF = true;
         data.clear();
         free(buf);
     }
@@ -120,6 +122,7 @@ extern "C"
         std::string result = buf;
         ObjLoader(result);
         reloadModel();
+        isGLTF = false;
         free(buf);
     }
     EMSCRIPTEN_KEEPALIVE
@@ -850,8 +853,8 @@ int main()
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
 
-    SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
-    SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES,16);
+    // SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
+    // SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES,16);
     /**
      * End Window
      */
@@ -1051,7 +1054,8 @@ int main()
     glm::vec3 hitNor = glm::vec3(1.0, 1.0, 1.0);
 
     unsigned int frame = 0,
-                 counter = 0;
+                 counter = 0,
+                 flipper = 0;
 
     loop = [&]
     {
@@ -1272,6 +1276,11 @@ int main()
         {
             showProjector = !showProjector;
         }
+        flipper = isGLTF ? 1 : 0;
+        std::string flipString = "Flipper: " + std::to_string(flipper) + "\n";
+        ImGui::Text(flipString.c_str());
+        decalsPass.use();
+        decalsPass.setInt("iFlipper", flipper);
 
         // for (int i = 0; i < 1; ++i)
         // {

@@ -10,7 +10,8 @@ out vec2 texCoords;
 uniform mat4 model;                                        
 uniform mat4 view;                                         
 uniform mat4 projection;  
-uniform mat4 decalProjector;          
+uniform mat4 decalProjector;    
+uniform int iFlipper;      
 
 mat2 rot(const in float a)
 {
@@ -22,6 +23,10 @@ mat2 rot(const in float a)
 void main()                                                
 {                
   texCoords = VertexTextureCoords; 
+  if (iFlipper == 1)
+  {
+    texCoords.y = 1. - texCoords.y;
+  }
   mat3 normalMatrix = transpose(inverse(mat3(model)));
   normals = normalMatrix * VertexNormals;        
   vec4 worldPos = model * vec4(VertexPosition.xyz, 1.);    

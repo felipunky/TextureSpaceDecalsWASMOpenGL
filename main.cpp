@@ -198,7 +198,7 @@ extern "C"
     EMSCRIPTEN_KEEPALIVE
     void downloadDecalTrigger(uint8_t* buf, int bufSize)
     {
-        downloadImage = buf[0];
+        downloadImage = 1u;
         free(buf);
     }
 }
@@ -1023,6 +1023,7 @@ int main()
      */
 
     bool showProjector = false;
+    bool showHitPoint  = false;
     
     float scale = 1.0f;
     float blend = 0.5f;
@@ -1032,7 +1033,6 @@ int main()
 	glm::mat4 view = glm::mat4(1.0f);
 	glm::mat4 model = glm::mat4(1.0f);
     centroid = bboxMax * glm::vec3(0.5) + bboxMin * glm::vec3(0.5);
-    model = glm::translate(model, -centroid);
 
     float iTime = 0.0f;
 
@@ -1057,8 +1057,13 @@ int main()
                  counter = 0,
                  flipper = 0;
 
+    float zoomSide = 0.5f,
+          zoomTop  = zoomSide;
+
     loop = [&]
     {
+        model = glm::mat4(1.0f);
+        model = glm::translate(model, -centroid);
         if (decalImageBuffer.size() > 0)
         {
             //decalsPass.createTexture(&decalTexture, "Assets/Textures/WatchMen.jpeg", "iChannel0", 1);
@@ -1142,14 +1147,19 @@ int main()
 
         view = glm::lookAt(camPos, camPos + camFront, camUp);
 
+        //std::cout << glm::to_string(view) << std::endl;
+
         glm::vec2 widthHeight = glm::vec2(screenWidth, screenHeight);
 
         // No need to compute this every frame as the FOV stays always the same.
-        float halfWidth = widthHeight.x * .5;
-		glm::mat4 projection = glm::perspective( glm::radians( 45.0f ), widthHeight.x / widthHeight.y,
-												 0.1f, 200.0f
-												);
+        glm::vec2 halfWidthHeight = widthHeight * glm::vec2(0.5, 0.5);
+        float aspect = halfWidthHeight.x / halfWidthHeight.y;
+        float near = 0.1f;
+        float far = 200.0f;
 
+		glm::mat4 projection     = glm::perspective( glm::radians( 45.0f ), widthHeight.x / widthHeight.y, near, far);
+        glm::mat4 projectionHalf = glm::perspective( glm::radians( 45.0f ), halfWidthHeight.x / widthHeight.y, near, far);                                       
+        glm::mat4 projectionSide = glm::ortho(-aspect, aspect, -1.0f, 1.0f, near, far);
         glm::vec3 mouse;
         if (!insideImGui)
 		{
@@ -1157,7 +1167,7 @@ int main()
             Uint32 buttons;
             buttons = SDL_GetMouseState(&mousePositionX, &mousePositionY);
             mouse = glm::vec3(mousePositionX, -mousePositionY + screenHeight, (clicked ? 1.0f : 0.0f));
-
+            mousePositionX = mousePositionX + screenWidth / 4;
 			if ((buttons & SDL_BUTTON_LMASK) != 0) 
 			{
 				clicked = true;
@@ -1276,9 +1286,14 @@ int main()
         {
             showProjector = !showProjector;
         }
+        if (ImGui::Button("Show Hit Point"))
+        {
+            showHitPoint = !showHitPoint;
+        }
+        ImGui::SliderFloat("Side Zoom", &zoomSide, 0.1f, 2.0f);
+        ImGui::SliderFloat("Front Zoom", &zoomTop, 0.1f, 2.0f);
+        // If we have a GLTF we need to invert the texture coordinates.
         flipper = isGLTF ? 1 : 0;
-        std::string flipString = "Flipper: " + std::to_string(flipper) + "\n";
-        ImGui::Text(flipString.c_str());
         decalsPass.use();
         decalsPass.setInt("iFlipper", flipper);
 
@@ -1373,7 +1388,7 @@ int main()
         {
             decalResult = uploadImage();
             // counter = 0;
-            downloadImage = 0;
+            downloadImage = 0u;
         }
 
         glEnable(GL_DEPTH_TEST);
@@ -1381,13 +1396,14 @@ int main()
         glCullFace(GL_BACK);
 
         // Light pass.
-        glViewport(0, 0, screenWidth, screenHeight);
+        //glScissor(0, 0, screenWidth/2, screenHeight);
+        glViewport(0, 0, screenWidth/2, screenHeight);
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glBindVertexArray(VAO);
         deferredPass.use();
         deferredPass.setMat4("model", model);
-        deferredPass.setMat4("projection", projection);
+        deferredPass.setMat4("projection", projectionHalf);
         deferredPass.setMat4("view", view);
         deferredPass.setFloat("iFlipAlbedo", (float)flipAlbedo);
         glActiveTexture(GL_TEXTURE0);
@@ -1409,7 +1425,7 @@ int main()
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glBindVertexArray(0);
-
+        
         // renderQuad();
 
         // glBindFramebuffer(GL_READ_FRAMEBUFFER, gBuffer);
@@ -1419,18 +1435,21 @@ int main()
         // // depth buffer in another shader stage (or somehow see to match the default framebuffer's internal format with the FBO's internal format).
         // glBlitFramebuffer(0, 0, WIDTH, HEIGHT, 0, 0, WIDTH, HEIGHT, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
         
-        // glm::mat4 hitPositionModel = glm::mat4(1);
-        // hitPositionModel = glm::translate(hitPositionModel, hitPos);
-        // hitPositionModel = glm::scale(hitPositionModel, glm::vec3(0.01));
+        if (showHitPoint)
+        {
+            glm::mat4 hitPositionModel = glm::mat4(1);
+            hitPositionModel = glm::translate(hitPositionModel, hitPos);
+            hitPositionModel = glm::scale(hitPositionModel, glm::vec3(0.01));
 
-        // glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        // glEnable(GL_DEPTH_TEST);
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glEnable(GL_DEPTH_TEST);
 
-        // hitPosition.use();
-        // hitPosition.setMat4("model",      hitPositionModel);
-        // hitPosition.setMat4("projection", projection);
-        // hitPosition.setMat4("view",       view);
-        // renderCube();
+            hitPosition.use();
+            hitPosition.setMat4("model",      hitPositionModel);
+            hitPosition.setMat4("projection", projectionHalf);
+            hitPosition.setMat4("view",       view);
+            renderCube();
+        }
 
         if (showProjector)
         {
@@ -1441,10 +1460,76 @@ int main()
 
             hitPosition.use();
             hitPosition.setMat4("model",      modelFrustum);
-            hitPosition.setMat4("projection", projection);
+            hitPosition.setMat4("projection", projectionHalf);
             hitPosition.setMat4("view",       view);
             renderFrustum(decalProjector);
         }
+
+        // Side View.
+        glViewport(screenWidth/2, 0, screenWidth/2, screenHeight/2);
+
+        // Scale for the side view.
+        glm::mat4 modelSide = glm::scale(model, glm::vec3(zoomSide, zoomSide, zoomSide));
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glBindVertexArray(VAO);
+        deferredPass.use();
+        deferredPass.setMat4("model", modelSide);
+        deferredPass.setMat4("projection", projectionSide);
+        deferredPass.setMat4("view", glm::mat4(-0.113205, -0.187880, 0.975646, 0.000000, 
+                                               0.000000, 0.981959, 0.189095, 0.000000, 
+                                               -0.993572, 0.021407, -0.111162, 0.000000, 
+                                               -0.064962, 0.388481, -4.221102, 1.000000));
+        deferredPass.setFloat("iFlipAlbedo", (float)flipAlbedo);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, material.normal);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, render);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, material.metallic);
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, material.ao);
+
+        deferredPass.setVec3("viewPos", camPos);
+        deferredPass.setFloat("iTime", iTime);
+
+        glDrawElements(GL_TRIANGLES, indexes.size(), GL_UNSIGNED_INT, 0);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glBindVertexArray(0);
+
+        // Front View.
+        glViewport(screenWidth/2, screenHeight/2, screenWidth/2, screenHeight/2);
+
+        // Scale for the side view.
+        glm::mat4 modelTop = glm::scale(model, glm::vec3(zoomTop, zoomTop, zoomTop));
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glBindVertexArray(VAO);
+        deferredPass.use();
+        deferredPass.setMat4("model", modelTop);
+        deferredPass.setMat4("projection", projectionSide);
+        deferredPass.setMat4("view", glm::mat4(1.0, 0.0,  0.0, 0.0, 
+                                               0.0, 1.0,  0.0, 0.0, 
+                                               0.0, 0.0,  1.0, 0.0, 
+                                               0.0, 0.0, -1.0, 1.0));
+        deferredPass.setFloat("iFlipAlbedo", (float)flipAlbedo);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, material.normal);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, render);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, material.metallic);
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, material.ao);
+
+        deferredPass.setVec3("viewPos", camPos);
+        deferredPass.setFloat("iTime", iTime);
+
+        glDrawElements(GL_TRIANGLES, indexes.size(), GL_UNSIGNED_INT, 0);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glBindVertexArray(0);
 
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

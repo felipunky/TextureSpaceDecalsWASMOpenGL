@@ -34,6 +34,8 @@
         let cvDrawImg;
         let meshData;
         let flipAlbedo = 0;
+        let isGLTF = false;
+        let original = false;
         window.onload = function()
         {   
             const loadImage = src => 
@@ -82,6 +84,7 @@
                     //previewCanvasContext.clearRect(0, 0, cv.width, cv.height);
                     sizeData[2] = clicked;
                     console.log("You are loading the Albedo texture...");
+                    flipAlbedo = isGLTF ? 0 : 1;
                 })
                 imgAlbedo.src = src;
             }
@@ -138,18 +141,16 @@
                     dataImage.data[i] = val;
                     });
                 }
-                if (flipAlbedo == 0)
+                if (flipAlbedo != 0)
+                {
+                    ctx.putImageData(dataImage, 0,0);
+                    ctx.drawImage(cvDrawImg, 0,0);    
+                }
+                else 
                 {
                     flip(dataImage, ctx);
                 }
-                else
-                {
-                    ctx.putImageData(dataImage, 0,0);
-                    ctx.drawImage(cvDrawImg, 0,0);
-                }
             };
-
-            downloadImage = 0;
 
             function UpdateTexture()
             {
@@ -177,11 +178,13 @@
                 loadImageAlbedo(URL.createObjectURL(event.target.files[0]));
             })
 
-            // Mesh input
+            // Obj Input
             const meshInput = document.getElementById("uploadMesh");
             meshInput.addEventListener("change", () => 
             {
                 readFile(event.target.files[0]);
+                isGLTF = false;
+                console.log(isGLTF);
             });
 
             async function readFile(file)
@@ -197,6 +200,9 @@
             const gltfInput = document.getElementById("uploadGLTF");
             gltfInput.addEventListener("change", () =>{
                 readGLTFFile(event.target.files[0]);
+                isGLTF = true;
+                flipAlbedo = 0;
+                console.log(isGLTF);
             });
 
             async function readGLTFFile(file)
@@ -210,15 +216,17 @@
 
             document.getElementById('download').addEventListener("click", function(e) 
             {
+                // Base Color.
                 ViewTexture();
                 drawArray(res, widthDecal, heightDecal);
                 var dataURL = cvDrawImg.toDataURL("image/png", 1.0);
                 var a = document.createElement('a');
                 a.href = dataURL;
-                a.download = 'T_shirt_albedo.jpg';
+                a.download = 'Albedo.png';
                 document.body.appendChild(a);
                 a.click();
 
+                /*
                 // Roughness.
                 a.href = "Assets/t-shirt-lp/textures/T_shirt_roughness.jpg";
                 a.download = "T_shirt_roughness.jpg";
@@ -235,7 +243,7 @@
                 a.click();
 
                 // Mesh.
-                downloadUrl("Assets/t-shirt-lp/source/Shirt.gltf");
+                downloadUrl("Assets/t-shirt-lp/source/Shirt.gltf");*/
             });
 
             function downloadUrl(url)

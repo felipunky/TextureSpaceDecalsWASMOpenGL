@@ -428,7 +428,7 @@ void EditTransform(float* cameraView, float* cameraProjection, float* matrix, bo
          mCurrentGizmoOperation = ImGuizmo::TRANSLATE;
       if (ImGui::IsKeyPressed(ImGuiKey_R))
          mCurrentGizmoOperation = ImGuizmo::ROTATE;
-      if (ImGui::IsKeyPressed(ImGuiKey_R)) // r Key
+      if (ImGui::IsKeyPressed(ImGuiKey_E)) 
          mCurrentGizmoOperation = ImGuizmo::SCALE;
       if (ImGui::RadioButton("Translate", mCurrentGizmoOperation == ImGuizmo::TRANSLATE))
          mCurrentGizmoOperation = ImGuizmo::TRANSLATE;
@@ -1060,10 +1060,13 @@ int main()
     float zoomSide = 0.5f,
           zoomTop  = zoomSide;
 
+    model = glm::mat4(1.0f);
+    model = glm::translate(model, -centroid);
+
+    glm::mat4 modelNoGuizmo = model;
+
     loop = [&]
     {
-        model = glm::mat4(1.0f);
-        model = glm::translate(model, -centroid);
         if (decalImageBuffer.size() > 0)
         {
             //decalsPass.createTexture(&decalTexture, "Assets/Textures/WatchMen.jpeg", "iChannel0", 1);
@@ -1217,15 +1220,18 @@ int main()
                                                    1.0f - (2.0f * float(mousePositionY)) / widthHeight.y, 
                                                    1.0f, 
                                                    1.0f);
-                glm::vec4 viewCoords  = glm::inverse(projection) * NDCPos;
-                glm::vec4 worldCoords = glm::inverse(view) * glm::vec4(viewCoords.x, viewCoords.y, -1.0f, 0.0f);
+                glm::mat4 inverseModel = glm::inverse(model);
+                glm::vec4 viewCoords   = glm::inverse(projection) * NDCPos;
+                viewCoords             = glm::inverse(view) * viewCoords;
+                glm::vec4 worldCoords  = inverseModel * glm::vec4(viewCoords.x, viewCoords.y, -1.0f, 0.0f);
 
                 glm::vec3 rayDir = glm::normalize(glm::vec3(worldCoords));
+                glm::vec3 rayOri = glm::vec3(inverseModel * glm::vec4(camPos.x, camPos.y, camPos.z, 1.0f));
 
                 nanort::Ray<float> ray;
-                ray.org[0] = camPos.x;
-                ray.org[1] = camPos.y;
-                ray.org[2] = camPos.z;
+                ray.org[0] = rayOri.x;
+                ray.org[1] = rayOri.y;
+                ray.org[2] = rayOri.z;
 
                 ray.dir[0] = rayDir.x;
                 ray.dir[1] = rayDir.y;
@@ -1240,7 +1246,7 @@ int main()
                 bool hit = accel.Traverse(ray, triangle_intersector, &isect);
                 if (hit)
                 {
-                    hitPos = camPos + rayDir * isect.t;
+                    hitPos = rayOri + rayDir * isect.t;
                     
                     unsigned int fid = isect.prim_id;
                     unsigned int id  = indexes[3 * fid];
@@ -1273,7 +1279,7 @@ int main()
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
-        // ImGuizmo::BeginFrame();
+        ImGuizmo::BeginFrame();
 
         ImGui::Begin("Graphical User Interface");   // Pass a pointer to our bool variable (the window will have a closing button that will clear the bool when clicked)
         std::string printTime = std::to_string(deltaTime * 1000.0f) + " ms.\n";
@@ -1297,15 +1303,15 @@ int main()
         decalsPass.use();
         decalsPass.setInt("iFlipper", flipper);
 
-        // for (int i = 0; i < 1; ++i)
-        // {
-        //     ImGuizmo::SetID(i);
-        //     EditTransform(glm::value_ptr(view), glm::value_ptr(projection), glm::value_ptr(model), lastUsing == i, io);
-        //     if (ImGuizmo::IsUsing())
-        //     {
-        //         lastUsing = i;
-        //     }
-        // }
+        for (int i = 0; i < 1; ++i)
+        {
+            ImGuizmo::SetID(i);
+            EditTransform(glm::value_ptr(view), glm::value_ptr(projectionHalf), glm::value_ptr(model), lastUsing == i, io);
+            if (ImGuizmo::IsUsing())
+            {
+                lastUsing = i;
+            }
+        }
         
         ImGui::End();
 
@@ -1437,7 +1443,7 @@ int main()
         
         if (showHitPoint)
         {
-            glm::mat4 hitPositionModel = glm::mat4(1);
+            glm::mat4 hitPositionModel = model;
             hitPositionModel = glm::translate(hitPositionModel, hitPos);
             hitPositionModel = glm::scale(hitPositionModel, glm::vec3(0.01));
 
@@ -1453,13 +1459,11 @@ int main()
 
         if (showProjector)
         {
-            glm::mat4 modelFrustum = glm::mat4(1.0f);
-
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
             glEnable(GL_DEPTH_TEST);
 
             hitPosition.use();
-            hitPosition.setMat4("model",      modelFrustum);
+            hitPosition.setMat4("model",      model);
             hitPosition.setMat4("projection", projectionHalf);
             hitPosition.setMat4("view",       view);
             renderFrustum(decalProjector);
@@ -1469,7 +1473,7 @@ int main()
         glViewport(screenWidth/2, 0, screenWidth/2, screenHeight/2);
 
         // Scale for the side view.
-        glm::mat4 modelSide = glm::scale(model, glm::vec3(zoomSide, zoomSide, zoomSide));
+        glm::mat4 modelSide = glm::scale(modelNoGuizmo, glm::vec3(zoomSide, zoomSide, zoomSide));
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glBindVertexArray(VAO);
@@ -1502,7 +1506,7 @@ int main()
         glViewport(screenWidth/2, screenHeight/2, screenWidth/2, screenHeight/2);
 
         // Scale for the side view.
-        glm::mat4 modelTop = glm::scale(model, glm::vec3(zoomTop, zoomTop, zoomTop));
+        glm::mat4 modelTop = glm::scale(modelNoGuizmo, glm::vec3(zoomTop, zoomTop, zoomTop));
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glBindVertexArray(VAO);

@@ -107,7 +107,11 @@ extern "C"
         bool res = GLTF::GetGLTFModel(&model, data);
         if (!res)
         {
+            #ifdef EXCEPTIONS
             throw std::runtime_error("Unable to read GLTF!");
+            #else
+            std::cout << "Unable to read GLTF!" << std::endl;
+            #endif
         }
         loadGLTF(model);
         reloadModel();
@@ -574,7 +578,11 @@ void ObjLoader(std::string inputFile)
             NULL,
             true))
     {
+        #ifdef EXCEPTIONS
         throw std::runtime_error("loadOBJFile: Error: " + warning + error);
+        #else
+        std::cout << "loadOBJFile: Error: " << warning << error << std::endl;
+        #endif
     }
 
     std::unordered_map<std::bitset<256>, uint32_t> uniqueVertices;
@@ -842,7 +850,11 @@ int main()
     SDL_GL_MakeCurrent(window, context);
     if (!context)
     {
+        #ifdef EXCEPTIONS
         throw std::runtime_error("Failed to create GL context!");
+        #else
+        std::cout << "Failed to create GL context!" << std::endl;
+        #endif
     } 
 
     SDL_GL_SetSwapInterval(1); // Enable vsync
@@ -929,7 +941,11 @@ int main()
     tinygltf::Model modelGLTF;
     if (!loadModel(modelGLTF, fileName.c_str()))
     {
+        #ifdef EXCEPTIONS
         throw std::runtime_error("load GLTF Error!");
+        #else
+        std::cout << "Load GLTF Error!" << std::endl;
+        #endif
     }
 
     loadGLTF(modelGLTF);
@@ -1284,7 +1300,7 @@ int main()
 
         ImGui::Begin("Graphical User Interface");   // Pass a pointer to our bool variable (the window will have a closing button that will clear the bool when clicked)
         std::string printTime = std::to_string(deltaTime * 1000.0f) + " ms.\n";
-		ImGui::Text(printTime.c_str());
+		ImGui::TextUnformatted(printTime.c_str());
         ImGui::SliderFloat("Texture Coordinates Scale", &scale, 1.0f, 100.0f);
         ImGui::SliderFloat("Blend Factor", &blend, 0.0f, 1.0f);
         ImGui::SliderFloat("Projector Size", &projectorSize, 0.1f, 1.0f);

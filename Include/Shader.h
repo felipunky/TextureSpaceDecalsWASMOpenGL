@@ -30,6 +30,10 @@
 #define JSON_NOEXCEPTION
 #include "tiny_gltf.h"
 
+#if 0
+    #define EXCEPTIONS
+#endif
+
 // Shader class taken from, there are some functions that are implemented by me: 
 // https://learnopengl.com/code_viewer_gh.php?code=includes/learnopengl/shader_m.h
 
@@ -53,6 +57,7 @@ public:
 		// ensure ifstream objects can throw exceptions:
 		vShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
 		fShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+		#ifdef EXCEPTIONS
 		try
 		{
 			// open files
@@ -73,6 +78,21 @@ public:
 		{
 			std::cout << "ERROR::SHADER::FILE_NOT_SUCCESFULLY_READ" << std::endl;
 		}
+		#else
+		// open files
+		vShaderFile.open(vertexPath);
+		fShaderFile.open(fragmentPath);
+		std::stringstream vShaderStream, fShaderStream;
+		// read file's buffer contents into streams
+		vShaderStream << vShaderFile.rdbuf();
+		fShaderStream << fShaderFile.rdbuf();
+		// close file handlers
+		vShaderFile.close();
+		fShaderFile.close();
+		// convert stream into string
+		vertexCode = vShaderStream.str();
+		fragmentCode = fShaderStream.str();
+		#endif
 		const char* vShaderCode = vertexCode.c_str();
 		const char* fShaderCode = fragmentCode.c_str();
 		// 2. compile shaders
@@ -202,7 +222,11 @@ public:
 		}
 		else
 		{
+			#ifdef EXCEPTIONS
 			throw std::runtime_error("Failed to load texture!");
+			#else
+			std::cout << "Failed to load texture!" << std::endl;
+			#endif
 		}
 		// Clear the data.
 		stbi_image_free(data);
@@ -243,7 +267,11 @@ public:
         }
 		else
 		{
+			#ifdef EXCEPTIONS
 			throw std::runtime_error("Failed to load texture!");
+			#else
+			std::cout << "Failed to load texture!" << std::endl;
+			#endif
 		}
 	}
 

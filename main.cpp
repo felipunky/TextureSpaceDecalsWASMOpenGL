@@ -968,11 +968,11 @@ int main()
 
     #ifdef PILOT_SHIRT
 
-    geometryPass.createTexture(&(material.normal), "Assets/Pilot/textures/T_DefaultMaterial_N_1k.png", "Normal", 1);
+    geometryPass.createTexture(&(material.normal), "Assets/Pilot/textures/T_DefaultMaterial_N.jpg", "Normal", 1);
     // geometryPass.createTexture(&(material.roughness), "Assets/t-shirt-lp/textures/T_shirt_roughness.jpg", "Roughness", 2);
     // geometryPass.createTexture(&(material.metallic), "Assets/Textures/rustediron1-alt2-Unreal-Engine/rustediron2_metallic.png", "Metallic", 3);
     // geometryPass.createTexture(&(material.ao), "Assets/t-shirt-lp/textures/T_shirt_AO.jpg", "AmbientOcclussion", 4);
-    geometryPass.createTexture(&(material.baseColor), "Assets/Pilot/textures/T_DefaultMaterial_B_1k.png", "BaseColor", 0);
+    geometryPass.createTexture(&(material.baseColor), "Assets/Pilot/textures/T_DefaultMaterial_B.jpg", "BaseColor", 0);
 
     #else
 

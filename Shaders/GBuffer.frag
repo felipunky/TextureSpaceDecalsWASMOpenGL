@@ -17,13 +17,13 @@ uniform sampler2D Roughness;
 uniform sampler2D Metallic;
 uniform sampler2D AmbientOcclussion; 
 uniform float flipAlbedo;
+uniform int iFlipper;
 
 void main()
 {    
     // store the fragment position vector in the first gbuffer texture
     gPosition = positions;
-    // also store the per-fragment normals into the gbuffer
-    gNormal = normalize(texture(Normal, texCoords).xyz);
+    
     // and the diffuse per-fragment color
     vec2 texCoordsAlbedo = texCoords;
     if (flipAlbedo == 1.)
@@ -31,8 +31,10 @@ void main()
         texCoordsAlbedo.y = 1. - texCoordsAlbedo.y;
         gPosition.y = 1. - gPosition.y;
     }
+    // also store the per-fragment normals into the gbuffer
+    gNormal = normalize(texture(Normal, texCoords).xyz);
     gAlbedo = texture(BaseColor, texCoordsAlbedo).rgb;
-    gMetallic = texture(Metallic, texCoords).rgb;
-    gRoughness = texture(Roughness, texCoords).rgb;
-    gAO = texture(AmbientOcclussion, texCoords).rgb;
+    //gMetallic = texture(Metallic, texCoords).rgb;
+    //gRoughness = texture(Roughness, texCoords).rgb;
+    //gAO = texture(AmbientOcclussion, texCoords).rgb;
 }

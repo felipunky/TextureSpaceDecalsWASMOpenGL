@@ -44,12 +44,7 @@ int newVerticesSize;
 int flipAlbedo = 0;
 uint8_t reload = 0u;
 uint8_t downloadImage = 0u;
-std::vector<uint8_t> decalImageBuffer,
-                     albedoBuffer,
-                     roughnessBuffer,
-                     normalBuffer,
-                     metallicBuffer,
-                     ambienOcclusionBuffer;
+std::vector<uint8_t> decalImageBuffer;
 std::vector<uint8_t> decalResult;
 uint16_t widthDecal = 4509u, heightDecal = 2798u, changeDecal = 0u,
          widthAlbedo,        heightAlbedo,        changeAlbedo = 0u;
@@ -144,21 +139,37 @@ extern "C"
     {
         std::cout << "Reading albedo from file!" << std::endl;
         std::cout << "Albedo buffer size: " << bufSize << std::endl;
-
-        albedoBuffer = loadArray(buf, bufSize);
         geometryPass.createTextureFromFile(&(material.baseColor), buf, geometryPass.Width, geometryPass.Height, "BaseColor", 0);
         free(buf);
     }
     EMSCRIPTEN_KEEPALIVE
     void passSizeAlbedo(uint16_t* buf, int bufSize)
     {
-        std::cout << "Reading decal image size!" << std::endl;
+        std::cout << "Reading Albedo image size!" << std::endl;
         geometryPass.Width = (int)buf[0];
         geometryPass.Height = (int)buf[1];
         flipAlbedo = (int)buf[2];
         std::cout << "Albedo Width: "  << +geometryPass.Width  << std::endl;
         std::cout << "Albedo Height: " << +geometryPass.Height << std::endl;
         std::cout << "Changed Albedo: "<< +flipAlbedo        << std::endl;
+        free(buf);
+    }
+    EMSCRIPTEN_KEEPALIVE
+    void loadNormal(uint8_t* buf, int bufSize)
+    {
+        std::cout << "Reading normal from file!" << std::endl;
+        std::cout << "Normal buffer size: " << bufSize << std::endl;
+        geometryPass.createTextureFromFile(&(material.normal), buf, geometryPass.Width, geometryPass.Height, "BaseColor", 0);
+        free(buf);
+    }
+    EMSCRIPTEN_KEEPALIVE
+    void passSizeNormal(uint16_t* buf, int bufSize)
+    {
+        std::cout << "Reading Normal image size!" << std::endl;
+        geometryPass.Width = (int)buf[0];
+        geometryPass.Height = (int)buf[1];
+        std::cout << "Normal Width: "  << +geometryPass.Width  << std::endl;
+        std::cout << "Normal Height: " << +geometryPass.Height << std::endl;
         free(buf);
     }
     EMSCRIPTEN_KEEPALIVE
@@ -957,18 +968,18 @@ int main()
 
     #ifdef PILOT_SHIRT
 
-    geometryPass.createTexture(&(material.normal), "Assets/t-shirt-lp/textures/T_shirt_normal.png", "Normal", 1);
-    geometryPass.createTexture(&(material.roughness), "Assets/t-shirt-lp/textures/T_shirt_roughness.jpg", "Roughness", 2);
-    geometryPass.createTexture(&(material.metallic), "Assets/Textures/rustediron1-alt2-Unreal-Engine/rustediron2_metallic.png", "Metallic", 3);
-    geometryPass.createTexture(&(material.ao), "Assets/t-shirt-lp/textures/T_shirt_AO.jpg", "AmbientOcclussion", 4);
+    geometryPass.createTexture(&(material.normal), "Assets/Pilot/textures/T_DefaultMaterial_N.jpg", "Normal", 1);
+    // geometryPass.createTexture(&(material.roughness), "Assets/t-shirt-lp/textures/T_shirt_roughness.jpg", "Roughness", 2);
+    // geometryPass.createTexture(&(material.metallic), "Assets/Textures/rustediron1-alt2-Unreal-Engine/rustediron2_metallic.png", "Metallic", 3);
+    // geometryPass.createTexture(&(material.ao), "Assets/t-shirt-lp/textures/T_shirt_AO.jpg", "AmbientOcclussion", 4);
     geometryPass.createTexture(&(material.baseColor), "Assets/Pilot/textures/T_DefaultMaterial_B.jpg", "BaseColor", 0);
 
     #else
 
     geometryPass.createTexture(&(material.normal), "Assets/t-shirt-lp/textures/T_shirt_normal.png", "Normal", 1);
-    geometryPass.createTexture(&(material.roughness), "Assets/t-shirt-lp/textures/T_shirt_roughness.jpg", "Roughness", 2);
-    geometryPass.createTexture(&(material.metallic), "Assets/Textures/rustediron1-alt2-Unreal-Engine/rustediron2_metallic.png", "Metallic", 3);
-    geometryPass.createTexture(&(material.ao), "Assets/t-shirt-lp/textures/T_shirt_AO.jpg", "AmbientOcclussion", 4);
+    // geometryPass.createTexture(&(material.roughness), "Assets/t-shirt-lp/textures/T_shirt_roughness.jpg", "Roughness", 2);
+    // geometryPass.createTexture(&(material.metallic), "Assets/Textures/rustediron1-alt2-Unreal-Engine/rustediron2_metallic.png", "Metallic", 3);
+    // geometryPass.createTexture(&(material.ao), "Assets/t-shirt-lp/textures/T_shirt_AO.jpg", "AmbientOcclussion", 4);
     geometryPass.createTexture(&(material.baseColor), "Assets/t-shirt-lp/textures/T_shirt_albedo.jpg", "BaseColor", 0);
 
     #endif
@@ -1019,9 +1030,9 @@ int main()
     deferredPass.use();
     deferredPass.setInt("gNormal",    0);
     deferredPass.setInt("gAlbedo",    1);
-    deferredPass.setInt("gMetallic",  2);
-    deferredPass.setInt("gRoughness", 3);
-    deferredPass.setInt("gAO",        4);
+    // deferredPass.setInt("gMetallic",  2);
+    // deferredPass.setInt("gRoughness", 3);
+    // deferredPass.setInt("gAO",        4);
 
     /**
      * End Shader Setup
@@ -1041,6 +1052,7 @@ int main()
 
     bool showProjector = false;
     bool showHitPoint  = false;
+    bool normalMap     = false;
     
     float scale = 1.0f;
     float blend = 0.5f;
@@ -1301,6 +1313,10 @@ int main()
         ImGui::Begin("Graphical User Interface");   // Pass a pointer to our bool variable (the window will have a closing button that will clear the bool when clicked)
         std::string printTime = std::to_string(deltaTime * 1000.0f) + " ms.\n";
 		ImGui::TextUnformatted(printTime.c_str());
+        if (ImGui::Button("Enable Normal Map"))
+        {
+            normalMap = !normalMap;
+        }
         ImGui::SliderFloat("Texture Coordinates Scale", &scale, 1.0f, 100.0f);
         ImGui::SliderFloat("Blend Factor", &blend, 0.0f, 1.0f);
         ImGui::SliderFloat("Projector Size", &projectorSize, 0.1f, 1.0f);
@@ -1361,12 +1377,12 @@ int main()
         glBindTexture(GL_TEXTURE_2D, material.baseColor);
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, material.normal);
-        glActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_2D, material.roughness);
-        glActiveTexture(GL_TEXTURE3);
-        glBindTexture(GL_TEXTURE_2D, material.metallic);
-        glActiveTexture(GL_TEXTURE4);
-        glBindTexture(GL_TEXTURE_2D, material.ao);
+        // glActiveTexture(GL_TEXTURE2);
+        // glBindTexture(GL_TEXTURE_2D, material.roughness);
+        // glActiveTexture(GL_TEXTURE3);
+        // glBindTexture(GL_TEXTURE_2D, material.metallic);
+        // glActiveTexture(GL_TEXTURE4);
+        // glBindTexture(GL_TEXTURE_2D, material.ao);
 
         glViewport(0, 0, WIDTH/4, HEIGHT/4);
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -1420,6 +1436,7 @@ int main()
 
         // Light pass.
         //glScissor(0, 0, screenWidth/2, screenHeight);
+        int enableNormals = normalMap ? 1 : 0;
         glViewport(0, 0, screenWidth/2, screenHeight);
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -1433,13 +1450,15 @@ int main()
         glBindTexture(GL_TEXTURE_2D, material.normal);
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, render);
-        glActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_2D, material.metallic);
-        glActiveTexture(GL_TEXTURE3);
-        glBindTexture(GL_TEXTURE_2D, material.ao);
+        // glActiveTexture(GL_TEXTURE2);
+        // glBindTexture(GL_TEXTURE_2D, material.metallic);
+        // glActiveTexture(GL_TEXTURE3);
+        // glBindTexture(GL_TEXTURE_2D, material.ao);
 
         deferredPass.setVec3("viewPos", camPos);
         deferredPass.setFloat("iTime", iTime);
+        deferredPass.setInt("iFlipper", flipper);
+        deferredPass.setInt("iNormals", enableNormals);
         // finally render quad
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -1506,13 +1525,15 @@ int main()
         glBindTexture(GL_TEXTURE_2D, material.normal);
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, render);
-        glActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_2D, material.metallic);
-        glActiveTexture(GL_TEXTURE3);
-        glBindTexture(GL_TEXTURE_2D, material.ao);
+        // glActiveTexture(GL_TEXTURE2);
+        // glBindTexture(GL_TEXTURE_2D, material.metallic);
+        // glActiveTexture(GL_TEXTURE3);
+        // glBindTexture(GL_TEXTURE_2D, material.ao);
 
         deferredPass.setVec3("viewPos", camPos);
         deferredPass.setFloat("iTime", iTime);
+        deferredPass.setInt("iFlipper", flipper);
+        deferredPass.setInt("iNormals", enableNormals);
 
         glDrawElements(GL_TRIANGLES, indexes.size(), GL_UNSIGNED_INT, 0);
 
@@ -1539,13 +1560,15 @@ int main()
         glBindTexture(GL_TEXTURE_2D, material.normal);
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, render);
-        glActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_2D, material.metallic);
-        glActiveTexture(GL_TEXTURE3);
-        glBindTexture(GL_TEXTURE_2D, material.ao);
+        // glActiveTexture(GL_TEXTURE2);
+        // glBindTexture(GL_TEXTURE_2D, material.metallic);
+        // glActiveTexture(GL_TEXTURE3);
+        // glBindTexture(GL_TEXTURE_2D, material.ao);
 
         deferredPass.setVec3("viewPos", camPos);
         deferredPass.setFloat("iTime", iTime);
+        deferredPass.setInt("iFlipper", flipper);
+        deferredPass.setInt("iNormals", enableNormals);
 
         glDrawElements(GL_TRIANGLES, indexes.size(), GL_UNSIGNED_INT, 0);
 

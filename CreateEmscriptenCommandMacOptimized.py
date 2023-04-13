@@ -22,7 +22,7 @@ imGuizmoPath = "/Users/felipe/Documents/GitHub/ImGuizmo/ImGuizmo/"
 nanoRTPath = "/Users/felipe/Documents/Graphics/nanort/ "
 rendererClass = ""
 if optimize:
-    optimizationLevel = "-O3 "
+    optimizationLevel = "-O2 "
 else:
     optimizationLevel = ""
 if renderer:
@@ -32,6 +32,7 @@ if withAssertions:
     assertions = "-sASSERTIONS=2 "
 
 emscriptenCommand = "emcc " + \
+                    "-g " + \
                     rendererClass + \
                     imguiPath + "imgui.cpp " + \
                     imguiPath + "imgui_draw.cpp " + \
@@ -53,15 +54,12 @@ emscriptenCommand = "emcc " + \
                     "-s FULL_ES3=1 " + \
                     "-s WASM=1 " + \
                     "-s USE_SDL=2 " + \
-                    "-s GL_DEBUG=1 " + \
+                    "-s GL_DEBUG=0 " + \
                     "-s FORCE_FILESYSTEM=1 " + \
                     webGLVersion + \
                     "-s ALLOW_MEMORY_GROWTH=1 " + \
                     optimizationLevel + \
-                    "-fno-rtti " + \
-                    "-fno-exceptions " + \
-                    "--closure 1 " + \
-                    "-sMAX_WEBGL_VERSION=2 " + \
+                    assertions + \
                     "-o index.js"
 print(emscriptenCommand)
 

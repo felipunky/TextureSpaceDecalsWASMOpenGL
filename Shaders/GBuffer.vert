@@ -22,13 +22,14 @@ mat2 rot(const in float a)
 
 void main()                                                
 {                
-  texCoords = VertexTextureCoords; 
+  texCoords = VertexTextureCoords;
+  vec3 vertexNormals = VertexNormals; 
   if (iFlipper == 1)
   {
     texCoords.y = 1. - texCoords.y;
   }
   mat3 normalMatrix = transpose(inverse(mat3(model)));
-  normals = normalMatrix * VertexNormals;        
+  normals = normalMatrix * vertexNormals;        
   vec4 worldPos = model * vec4(VertexPosition.xyz, 1.);    
   vec4 objPos = projection * view * worldPos;    
   positions = objPos.xyz;

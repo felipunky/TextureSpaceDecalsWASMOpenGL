@@ -32,7 +32,6 @@ if withAssertions:
     assertions = "-sASSERTIONS=2 "
 
 emscriptenCommand = "emcc " + \
-                    "-g " + \
                     rendererClass + \
                     imguiPath + "imgui.cpp " + \
                     imguiPath + "imgui_draw.cpp " + \

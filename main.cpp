@@ -49,6 +49,8 @@ std::vector<uint8_t> decalResult;
 uint16_t widthDecal = 4509u, heightDecal = 2798u, changeDecal = 0u,
          widthAlbedo,        heightAlbedo,        changeAlbedo = 0u;
 Shader geometryPass = Shader();
+unsigned int render;
+unsigned int fbo;
 
 nanort::BVHAccel<float> accel;
 unsigned int VBOVertices, VBONormals, VBOTextureCoordinates, VAO, EBO;
@@ -146,9 +148,28 @@ extern "C"
     void passSizeAlbedo(uint16_t* buf, int bufSize)
     {
         std::cout << "Reading Albedo image size!" << std::endl;
-        geometryPass.Width = (int)buf[0];
-        geometryPass.Height = (int)buf[1];
+        int width  = (int)buf[0];
+        int height = (int)buf[1];
+
+        geometryPass.use();
+        geometryPass.Width  = width;
+        geometryPass.Height = height;
         flipAlbedo = (int)buf[2];
+        if (true)//((width != geometryPass.Width) || (height != geometryPass.Height))
+        {
+            std::cout << "Albedo size changed regenerating glTexImage2D" << std::endl;
+            glDeleteTextures(1, &render);
+            glDeleteTextures(1, &(material.baseColor));
+
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
+            glGenTextures(1, &render);
+            glBindTexture(GL_TEXTURE_2D, render);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, geometryPass.Width, geometryPass.Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, render, 0);
+        }
         std::cout << "Albedo Width: "  << +geometryPass.Width  << std::endl;
         std::cout << "Albedo Height: " << +geometryPass.Height << std::endl;
         std::cout << "Changed Albedo: "<< +flipAlbedo        << std::endl;
@@ -166,8 +187,30 @@ extern "C"
     void passSizeNormal(uint16_t* buf, int bufSize)
     {
         std::cout << "Reading Normal image size!" << std::endl;
-        geometryPass.Width = (int)buf[0];
-        geometryPass.Height = (int)buf[1];
+
+        int width  = (int)buf[0];
+        int height = (int)buf[1];
+
+        geometryPass.use();
+
+        if (true)//((width != geometryPass.Width) || (height != geometryPass.Height))
+        {
+            std::cout << "Normal size changed regenerating glTexImage2D" << std::endl;
+            glDeleteTextures(1, &render);
+            glDeleteTextures(1, &(material.normal));
+
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
+            glGenTextures(1, &render);
+            glBindTexture(GL_TEXTURE_2D, render);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, geometryPass.Width, geometryPass.Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, render, 0);
+        }
+
+        geometryPass.Width  = width;
+        geometryPass.Height = height;
         std::cout << "Normal Width: "  << +geometryPass.Width  << std::endl;
         std::cout << "Normal Height: " << +geometryPass.Height << std::endl;
         free(buf);
@@ -968,11 +1011,11 @@ int main()
 
     #ifdef PILOT_SHIRT
 
-    geometryPass.createTexture(&(material.normal), "Assets/Pilot/textures/T_DefaultMaterial_N.jpg", "Normal", 1);
+    geometryPass.createTexture(&(material.normal), "Assets/Pilot/textures/T_DefaultMaterial_N_1k.png", "Normal", 1);
     // geometryPass.createTexture(&(material.roughness), "Assets/t-shirt-lp/textures/T_shirt_roughness.jpg", "Roughness", 2);
     // geometryPass.createTexture(&(material.metallic), "Assets/Textures/rustediron1-alt2-Unreal-Engine/rustediron2_metallic.png", "Metallic", 3);
     // geometryPass.createTexture(&(material.ao), "Assets/t-shirt-lp/textures/T_shirt_AO.jpg", "AmbientOcclussion", 4);
-    geometryPass.createTexture(&(material.baseColor), "Assets/Pilot/textures/T_DefaultMaterial_B.jpg", "BaseColor", 0);
+    geometryPass.createTexture(&(material.baseColor), "Assets/Pilot/textures/T_DefaultMaterial_B_1k.png", "BaseColor", 0);
 
     #else
 
@@ -1003,7 +1046,6 @@ int main()
     glDrawBuffers(1, attachments);
 
     // Render to texture space.
-    unsigned int fbo;
     glGenFramebuffers(1, &fbo);
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 
@@ -1011,7 +1053,6 @@ int main()
     std::cout << "Albedo Width: "  << geometryPass.Width  << std::endl;
     std::cout << "Albedo Height: " << geometryPass.Height << std::endl;
 
-    unsigned int render;
     glGenTextures(1, &render);
     glBindTexture(GL_TEXTURE_2D, render);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, geometryPass.Width, geometryPass.Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);

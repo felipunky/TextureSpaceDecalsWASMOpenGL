@@ -8,9 +8,9 @@ layout (location = 3) out vec3 gMetallic;
 layout (location = 4) out vec3 gRoughness;
 layout (location = 5) out vec3 gAO;
 
-in vec3 positions;
-in vec3 normals;                                                          
+in vec3 positions;                                                         
 in vec2 texCoords;
+in mat3 TBN;
 uniform sampler2D BaseColor;
 uniform sampler2D Normal;        
 uniform sampler2D Roughness;

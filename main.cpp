@@ -53,7 +53,7 @@ unsigned int render;
 unsigned int fbo;
 
 nanort::BVHAccel<float> accel;
-unsigned int VBOVertices, VBONormals, VBOTextureCoordinates, VAO, EBO;
+unsigned int VBOVertices, VBONormals, VBOTextureCoordinates, VBOTangents, VAO, EBO;
 
 std::vector<uint8_t> uploadImage()
 {
@@ -270,10 +270,10 @@ static ImGuizmo::OPERATION mCurrentGizmoOperation(ImGuizmo::TRANSLATE);
 std::function<void()> loop;
 void main_loop() { loop(); }
 
-std::vector<glm::vec3> modelDataVertices,
-                       meshRawVertices;
+std::vector<glm::vec3> modelDataVertices;
 std::vector<glm::vec3> modelDataNormals;
 std::vector<glm::vec2> modelDataTextureCoordinates;
+std::vector<glm::vec4> modelDataTangents;
 std::vector<tinyobj::material_t> modelDataMaterial;
 std::map<std::string, GLuint> modelDataTextures;
 std::vector<unsigned int> indexes,
@@ -593,6 +593,65 @@ std::bitset<256> VertexBitHash(glm::vec3* v, glm::vec3* n, glm::vec2* u) {
     return bits;
 }
 
+void ComputeTangents() 
+{
+    modelDataTangents.clear();
+    modelDataTangents.resize(indexes.size(), glm::vec4(0.0f, 0.0f, 0.0f, 0.0f));
+    for(unsigned int i = 0; i < indexes.size(); i += 3)
+    {
+
+        glm::vec3 vertex0 = modelDataVertices[indexes[i]];
+        glm::vec3 vertex1 = modelDataVertices[indexes[i + 1]];
+        glm::vec3 vertex2 = modelDataVertices[indexes[i + 2]];
+
+
+        glm::vec3 deltaPos;
+        if(vertex0 == vertex1)
+        {
+            deltaPos = vertex2 - vertex0;
+        }
+        else
+        {
+            deltaPos = vertex1 - vertex0;
+        }
+        glm::vec2 uv0 = modelDataTextureCoordinates[indexes[i]];
+        glm::vec2 uv1 = modelDataTextureCoordinates[indexes[i + 1]];
+        glm::vec2 uv2 = modelDataTextureCoordinates[indexes[i + 2]];
+
+        glm::vec2 deltaUV1 = uv1 - uv0;
+        glm::vec2 deltaUV2 = uv2 - uv0;
+
+        glm::vec3 tan; // tangents
+
+        // avoid divion by 0
+        if(deltaUV1.s != 0)
+        {
+            tan = deltaPos / deltaUV1.s;
+        }
+        else
+        {
+            tan = deltaPos / 1.0f;
+        }
+        glm::vec3 normal = modelDataNormals[indexes[i]];
+        
+        glm::vec3 vectorOne = vertex1 - vertex0;
+        glm::vec3 vectorTwo = vertex2 - vertex0;
+
+        float r = 1.0f / (deltaUV1.x * deltaUV2.y - deltaUV2.x * deltaUV1.y);
+        glm::vec3 tan2 = glm::vec3((deltaUV1.x * vectorTwo.x - deltaUV2.x * vectorOne.x) * r, 
+                                   (deltaUV1.x * vectorTwo.y - deltaUV2.x * vectorOne.y) * r,
+                                   (deltaUV1.x * vectorTwo.z - deltaUV2.x * vectorOne.z) * r);
+        
+        tan = glm::normalize(tan - glm::dot(normal, tan) * normal);
+        glm::vec4 tangent = glm::vec4(tan, (glm::dot(glm::cross(normal, tan), tan2) < 0.0f ? -1.0f : 1.0f));
+
+        // write into array - for each vertex of the face the same value
+        modelDataTangents[indexes[i]]     = tangent;
+        modelDataTangents[indexes[i + 1]] = tangent;
+        modelDataTangents[indexes[i + 2]] = tangent;
+    }
+}
+
 void ObjLoader(std::string inputFile)
 {
     bboxMin = glm::vec3(1e+5);
@@ -600,6 +659,7 @@ void ObjLoader(std::string inputFile)
     modelDataVertices.clear();
     modelDataNormals.clear();
     modelDataTextureCoordinates.clear();
+    modelDataTangents.clear();
     indexes.clear();
     //delete[] mesh.Vertices;
     //delete[] mesh.Normals;
@@ -678,14 +738,11 @@ void ObjLoader(std::string inputFile)
         }
     }
 
-    //mesh.NumOfFaces    = indexes.size() / 3;
-    //mesh.NumOfVertices = modelDataVertices.size();
-    //mesh.Vertices      = glm::value_ptr(modelDataVertices[0]);
-    //mesh.Normals       = &modelDataNormals[0][0];
-    //mesh.Faces         = &indexes[0];
+    ComputeTangents();
 
     std::cout << "Vertices: " << modelDataVertices.size() << "\n";
     std::cout << "Normals: " << modelDataNormals.size() << "\n";
+    std::cout << "Tangents: " << modelDataTangents.size() << "\n";
     std::cout << "Texture Coordinates: " << modelDataTextureCoordinates.size() << "\n";
     std::cout << "Materials: " << materials.size() << "\n";
     std::cout << "BboxMax: {x: " << bboxMax.x << ", y: " << bboxMax.y << ", z: " << bboxMax.z << "}\n";
@@ -733,6 +790,7 @@ void loadGLTF(tinygltf::Model &model)
     modelDataVertices.clear();
     modelDataNormals.clear();
     modelDataTextureCoordinates.clear();
+    modelDataTangents.clear();
     indexes.clear();
 
     std::unordered_map<std::bitset<256>, uint32_t> uniqueVertices;
@@ -753,6 +811,7 @@ void loadGLTF(tinygltf::Model &model)
             bool result = GLTF::GetAttributes<glm::vec3>(model, prim, modelDataVertices, "POSITION");
                  result = GLTF::GetAttributes<glm::vec3>(model, prim, modelDataNormals, "NORMAL");
                  result = GLTF::GetAttributes<glm::vec2>(model, prim, modelDataTextureCoordinates, "TEXCOORD_0");
+                 result = GLTF::GetAttributes<glm::vec4>(model, prim, modelDataTangents, "TANGENT");
 
             if (prim.indices > -1)
             {
@@ -792,9 +851,16 @@ void loadGLTF(tinygltf::Model &model)
 
         }
     }
+
+    if (modelDataTangents.size() == 0)
+    {
+        ComputeTangents();
+    }
+
     std::cout << "Vertices: " << modelDataVertices.size() << "\n";
     std::cout << "Normals: " << modelDataNormals.size() << "\n";
     std::cout << "Texture Coordinates: " << modelDataTextureCoordinates.size() << "\n";
+    std::cout << "Tangents: " << modelDataTangents.size() << "\n";
     //std::cout << "Materials: " << materials.size() << "\n";
     std::cout << "BboxMax: {x: " << bboxMax.x << ", y: " << bboxMax.y << ", z: " << bboxMax.z << "}\n";
     std::cout << "BboxMin: {x: " << bboxMin.x << ", y: " << bboxMin.y << ", z: " << bboxMin.z << "}\n";
@@ -826,6 +892,10 @@ void CreateBOs()
     glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec2) * modelDataTextureCoordinates.size(), modelDataTextureCoordinates.data(), GL_STATIC_DRAW);
     //modelDataTextureCoordinates.clear();
 
+    glGenBuffers(1, &VBOTangents);
+    glBindBuffer(GL_ARRAY_BUFFER, VBOTangents);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec4) * modelDataTangents.size(), modelDataTangents.data(), GL_STATIC_DRAW);
+
     glGenBuffers(1, &EBO);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned int) * indexes.size(), indexes.data(), GL_STATIC_DRAW);
@@ -846,6 +916,10 @@ void CreateBOs()
 	glEnableVertexAttribArray(2);
 	glBindBuffer(GL_ARRAY_BUFFER, VBOTextureCoordinates);
 	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
+
+    glEnableVertexAttribArray(3);
+    glBindBuffer(GL_ARRAY_BUFFER, VBOTangents);
+    glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, 0, (void*)0);
 }
 
 void BuildBVH()
@@ -1636,7 +1710,10 @@ int main()
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL2_Shutdown();
     ImGui::DestroyContext();
+    modelDataVertices.clear();
     modelDataNormals.clear();
+    modelDataTextureCoordinates.clear();
+    modelDataTangents.clear();
     indexes.clear();
     //delete[] mesh.Vertices;
     //delete[] mesh.Normals;

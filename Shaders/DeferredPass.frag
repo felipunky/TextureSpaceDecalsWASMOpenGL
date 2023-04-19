@@ -2,9 +2,9 @@
 precision mediump float;
 
 //in vec2 TexCoords;
-in vec3 positions;
-in vec3 normals;                                
-in vec2 TexCoords; 
+in vec3 positions;                               
+in vec2 TexCoords;
+in mat3 TBN; 
 
 uniform sampler2D gNormal;
 uniform sampler2D gAlbedo;
@@ -87,7 +87,7 @@ void main()
     if (iNormals == 1)
     {
 
-        vec3 light = vec3(8.+sin(iTime), 10.0, -6.+cos(iTime));
+        vec3 light = vec3(2.+sin(iTime), 1.0+cos(iTime), -6.);
         vec3 L = normalize(light - FragPos);
 
         if (iFlipper == 1)
@@ -96,6 +96,7 @@ void main()
         }
 
         vec3 N = getNormalFromMap(texCoordsAlbedo);
+        N = normalize(TBN * N);
 
         vec3 col = albedo * max(0., dot(L, -N));
 

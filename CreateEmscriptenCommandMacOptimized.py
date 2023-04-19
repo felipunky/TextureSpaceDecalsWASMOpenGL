@@ -22,7 +22,7 @@ imGuizmoPath = "/Users/felipe/Documents/GitHub/ImGuizmo/ImGuizmo/"
 nanoRTPath = "/Users/felipe/Documents/Graphics/nanort/ "
 rendererClass = ""
 if optimize:
-    optimizationLevel = "-O2 "
+    optimizationLevel = "-O3 "
 else:
     optimizationLevel = ""
 if renderer:
@@ -57,6 +57,7 @@ emscriptenCommand = "emcc " + \
                     "-s FORCE_FILESYSTEM=1 " + \
                     webGLVersion + \
                     "-s ALLOW_MEMORY_GROWTH=1 " + \
+                    "-s EXPORTED_RUNTIME_METHODS=ccall,cwrap " + \
                     optimizationLevel + \
                     assertions + \
                     "-o index.js"

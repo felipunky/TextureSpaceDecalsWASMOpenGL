@@ -1010,6 +1010,8 @@ void BuildBVH()
     #endif
     float bmin[3], bmax[3];
     accelDummy.BoundingBox(bmin, bmax);
+    // bboxMax = glm::vec3(bmax[0], bmax[1], bmax[2]);
+    // bboxMin = glm::vec3(bmin[0], bmin[1], bmax[2]);
     #ifdef OPTIMIZE
     #else
     printf("  Bmin               : %f, %f, %f\n", bmin[0], bmin[1], bmin[2]);
@@ -1090,7 +1092,7 @@ int main()
     bool clicked = false;
 
 	const float SPEED = 5.0f;
-	glm::vec3 camPos = glm::vec3( 0.0f, 0.0f, 1.0f ); 
+	glm::vec3 camPos = glm::vec3( 0.0f, -0.7f, 5.0f ); 
 	glm::vec3 camFront = glm::vec3( 0.0f, 0.0f, -1.0f );
 	glm::vec3 camUp = glm::vec3( 0.0f, 1.0f, 0.0f );
 
@@ -1148,11 +1150,11 @@ int main()
 
     #ifdef PILOT_SHIRT
 
-    geometryPass.createTexture(&(material.normal), "Assets/Pilot/textures/T_DefaultMaterial_N_1k.png", "Normal", 1);
+    geometryPass.createTexture(&(material.normal), "Assets/Pilot/textures/T_DefaultMaterial_N_1k.jpg", "Normal", 1);
     // geometryPass.createTexture(&(material.roughness), "Assets/t-shirt-lp/textures/T_shirt_roughness.jpg", "Roughness", 2);
     // geometryPass.createTexture(&(material.metallic), "Assets/Textures/rustediron1-alt2-Unreal-Engine/rustediron2_metallic.png", "Metallic", 3);
     // geometryPass.createTexture(&(material.ao), "Assets/t-shirt-lp/textures/T_shirt_AO.jpg", "AmbientOcclussion", 4);
-    geometryPass.createTexture(&(material.baseColor), "Assets/Pilot/textures/T_DefaultMaterial_B_1k.png", "BaseColor", 0);
+    geometryPass.createTexture(&(material.baseColor), "Assets/Pilot/textures/T_DefaultMaterial_B_1k.jpg", "BaseColor", 0);
 
     #else
 
@@ -1247,7 +1249,7 @@ int main()
     float iTime = 0.0f;
 
     unsigned int decalTexture = -1;
-    decalsPass.createTexture(&decalTexture, "Assets/Textures/Batman.png", "iChannel0", 1);
+    decalsPass.createTexture(&decalTexture, "Assets/Textures/Batman.jpg", "iChannel0", 1);
     decalsPass.setInt("iChannel1", 0);
     decalsPass.setInt("iDepth", 2);
 

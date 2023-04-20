@@ -1574,6 +1574,7 @@ int main()
         deferredPass.setFloat("iTime", iTime);
         deferredPass.setInt("iFlipper", flipper);
         deferredPass.setInt("iNormals", enableNormals);
+        deferredPass.setFloat("iTime", iTime);
         // finally render quad
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -1648,7 +1649,8 @@ int main()
         deferredPass.setVec3("viewPos", camPos);
         deferredPass.setFloat("iTime", iTime);
         deferredPass.setInt("iFlipper", flipper);
-        deferredPass.setInt("iNormals", enableNormals);
+        deferredPass.setInt("iNormals", 0);//enableNormals);
+        deferredPass.setFloat("iTime", iTime);
 
         glDrawElements(GL_TRIANGLES, indexes.size(), GL_UNSIGNED_INT, 0);
 
@@ -1683,7 +1685,8 @@ int main()
         deferredPass.setVec3("viewPos", camPos);
         deferredPass.setFloat("iTime", iTime);
         deferredPass.setInt("iFlipper", flipper);
-        deferredPass.setInt("iNormals", enableNormals);
+        deferredPass.setInt("iNormals", 0);//enableNormals);
+        deferredPass.setFloat("iTime", iTime);
 
         glDrawElements(GL_TRIANGLES, indexes.size(), GL_UNSIGNED_INT, 0);
 

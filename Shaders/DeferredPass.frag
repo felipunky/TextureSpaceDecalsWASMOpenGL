@@ -87,8 +87,9 @@ void main()
     if (iNormals == 1)
     {
 
-        vec3 light = vec3(2.+sin(iTime), 1.0+cos(iTime), -6.);
+        vec3 light = vec3(2.+sin(iTime), 1.0, -6.+cos(iTime));
         vec3 L = normalize(light - FragPos);
+        vec3 V = normalize(viewPos - FragPos);
 
         if (iFlipper == 1)
         {
@@ -98,7 +99,12 @@ void main()
         vec3 N = getNormalFromMap(texCoordsAlbedo);
         N = normalize(TBN * N);
 
+        vec3 halfWayVector = normalize(L + V);
+
+        float spe = pow(max(dot(N, halfWayVector), 0.0), 32.0);
+
         vec3 col = albedo * max(0., dot(L, -N));
+        col += spe * 0.4;
 
         FragColor = vec4(pow(col, vec3(2.2)), 1.0);
 

@@ -55,7 +55,7 @@
                     previewCanvasContext = cv.getContext("2d");
                     previewCanvasContext.drawImage(img, 0, 0);
 
-                    console.log("Passing image data to WASM");
+                    //console.log("Passing image data to WASM");
 
                     passToWASM();
                 })
@@ -77,14 +77,14 @@
                     previewCanvasContext = cv.getContext("2d");
                     previewCanvasContext.drawImage(imgAlbedo, 0, 0);
 
-                    console.log("Passing Albedo image data to WASM");
+                    //console.log("Passing Albedo image data to WASM");
 
                     const imageData = previewCanvasContext.getImageData(0, 0, cv.width, cv.height).data;
                     ccallArrays("passSizeAlbedo", null, ["array"], [sizeData], {heapIn: "HEAPU16"});
                     ccallArrays("loadAlbedo", null, ["array"], [imageData], {heapIn: "HEAPU8"});
                     //previewCanvasContext.clearRect(0, 0, cv.width, cv.height);
                     sizeData[2] = clicked;
-                    console.log("You are loading the Albedo texture...");
+                    //console.log("You are loading the Albedo texture...");
                     flipAlbedo = isGLTF ? 0 : 1;
                 });
                 imgAlbedo.src = src;
@@ -104,7 +104,7 @@
                     previewCanvasContext = cv.getContext("2d");
                     previewCanvasContext.drawImage(imgNormal, 0, 0);
 
-                    console.log("Passing Normal image data to WASM");
+                    //console.log("Passing Normal image data to WASM");
 
                     const imageData = previewCanvasContext.getImageData(0, 0, cv.width, cv.height).data;
                     ccallArrays("passSizeNormal", null, ["array"], [sizeDataNormal], {heapIn: "HEAPU16"});
@@ -215,7 +215,7 @@
             {
                 readFile(event.target.files[0]);
                 isGLTF = false;
-                console.log(isGLTF);
+                //console.log(isGLTF);
             });
 
             async function readFile(file)
@@ -233,7 +233,7 @@
                 readGLTFFile(event.target.files[0]);
                 isGLTF = true;
                 flipAlbedo = 0;
-                console.log(isGLTF);
+                //console.log(isGLTF);
             });
 
             async function readGLTFFile(file)

@@ -67,7 +67,10 @@ std::vector<uint8_t> uploadImage()
 
 std::vector<uint8_t> loadArray(uint8_t* buf, int bufSize)
 {
+    #ifdef OPTIMIZE
+    #else
     std::cout << "Buffer size: " << bufSize << std::endl;
+    #endif
     std::vector<uint8_t> newBuf(bufSize);
     for (int i = 0; i < bufSize; ++i)
     {
@@ -130,24 +133,32 @@ extern "C"
     void load(uint8_t* buf, int bufSize) 
     {
         //printf("[WASM] Loading Texture \n");
+        #ifdef OPTIMIZE
+        #else
         std::cout << "Reading decal image!" << std::endl;
         std::cout << "Decal buffer size: " << bufSize << std::endl;
-        
+        #endif
         decalImageBuffer = loadArray(buf, bufSize);
         free(buf);
     }
     EMSCRIPTEN_KEEPALIVE
     void loadAlbedo(uint8_t* buf, int bufSize)
     {
+        #ifdef OPTIMIZE
+        #else
         std::cout << "Reading albedo from file!" << std::endl;
         std::cout << "Albedo buffer size: " << bufSize << std::endl;
+        #endif
         geometryPass.createTextureFromFile(&(material.baseColor), buf, geometryPass.Width, geometryPass.Height, "BaseColor", 0);
         free(buf);
     }
     EMSCRIPTEN_KEEPALIVE
     void passSizeAlbedo(uint16_t* buf, int bufSize)
     {
+        #ifdef OPTIMIZE
+        #else
         std::cout << "Reading Albedo image size!" << std::endl;
+        #endif
         int width  = (int)buf[0];
         int height = (int)buf[1];
 
@@ -155,76 +166,95 @@ extern "C"
         geometryPass.Width  = width;
         geometryPass.Height = height;
         flipAlbedo = (int)buf[2];
-        if (true)//((width != geometryPass.Width) || (height != geometryPass.Height))
-        {
-            std::cout << "Albedo size changed regenerating glTexImage2D" << std::endl;
-            glDeleteTextures(1, &render);
-            glDeleteTextures(1, &(material.baseColor));
+        
+        #ifdef OPTIMIZE
+        #else
+        std::cout << "Albedo size changed regenerating glTexImage2D" << std::endl;
+        #endif
+        glDeleteTextures(1, &render);
+        glDeleteTextures(1, &(material.baseColor));
 
-            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 
-            glGenTextures(1, &render);
-            glBindTexture(GL_TEXTURE_2D, render);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, geometryPass.Width, geometryPass.Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, render, 0);
-        }
+        glGenTextures(1, &render);
+        glBindTexture(GL_TEXTURE_2D, render);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, geometryPass.Width, geometryPass.Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, render, 0);
+        
+        #ifdef OPTIMIZE
+        #else
         std::cout << "Albedo Width: "  << +geometryPass.Width  << std::endl;
         std::cout << "Albedo Height: " << +geometryPass.Height << std::endl;
         std::cout << "Changed Albedo: "<< +flipAlbedo        << std::endl;
+        #endif
         free(buf);
     }
     EMSCRIPTEN_KEEPALIVE
     void loadNormal(uint8_t* buf, int bufSize)
     {
+        #ifdef OPTIMIZE
+        #else
         std::cout << "Reading normal from file!" << std::endl;
         std::cout << "Normal buffer size: " << bufSize << std::endl;
+        #endif
         geometryPass.createTextureFromFile(&(material.normal), buf, geometryPass.Width, geometryPass.Height, "BaseColor", 0);
         free(buf);
     }
     EMSCRIPTEN_KEEPALIVE
     void passSizeNormal(uint16_t* buf, int bufSize)
     {
+        #ifdef OPTIMIZE
+        #else
         std::cout << "Reading Normal image size!" << std::endl;
-
+        #endif
         int width  = (int)buf[0];
         int height = (int)buf[1];
 
         geometryPass.use();
 
-        if (true)//((width != geometryPass.Width) || (height != geometryPass.Height))
-        {
-            std::cout << "Normal size changed regenerating glTexImage2D" << std::endl;
-            glDeleteTextures(1, &render);
-            glDeleteTextures(1, &(material.normal));
+        #ifdef OPTIMIZE
+        #else
+        std::cout << "Normal size changed regenerating glTexImage2D" << std::endl;
+        #endif
+        glDeleteTextures(1, &render);
+        glDeleteTextures(1, &(material.normal));
 
-            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 
-            glGenTextures(1, &render);
-            glBindTexture(GL_TEXTURE_2D, render);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, geometryPass.Width, geometryPass.Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, render, 0);
-        }
+        glGenTextures(1, &render);
+        glBindTexture(GL_TEXTURE_2D, render);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, geometryPass.Width, geometryPass.Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, render, 0);
 
         geometryPass.Width  = width;
         geometryPass.Height = height;
+        #ifdef OPTIMIZE
+        #else
         std::cout << "Normal Width: "  << +geometryPass.Width  << std::endl;
         std::cout << "Normal Height: " << +geometryPass.Height << std::endl;
+        #endif
         free(buf);
     }
     EMSCRIPTEN_KEEPALIVE
     void passSize(uint16_t* buf, int bufSize)
     {
+        #ifdef OPTIMIZE
+        #else
         std::cout << "Reading decal image size!" << std::endl;
+        #endif
         widthDecal  = buf[0];
         heightDecal = buf[1];
         changeDecal = buf[2];
+        #ifdef OPTIMIZE
+        #else
         std::cout << "Decal Width: "  << +widthDecal  << std::endl;
         std::cout << "Decal Height: " << +heightDecal << std::endl;
         std::cout << "Clicked :"      << +changeDecal     << std::endl;
+        #endif
         free(buf);
     }
     EMSCRIPTEN_KEEPALIVE
@@ -232,14 +262,20 @@ extern "C"
     {
         if (decalResult.size() > 0)
         {
+            #ifdef OPTIMIZE
+            #else
             std::cout << "Successful loading the image into data!" << std::endl;
+            #endif
             uint8_t* result = &decalResult[0];
             free(buf);
             return result;
         }
         else
         {
+            #ifdef OPTIMIZE
+            #else
             std::cout << "Unsuccesful loading the image into data!" << std::endl;
+            #endif
             int size = 4 * geometryPass.Width * geometryPass.Height;//*/WIDTH * HEIGHT;
             uint8_t values[size];
     
@@ -740,6 +776,8 @@ void ObjLoader(std::string inputFile)
 
     ComputeTangents();
 
+    #ifdef OPTIMIZE
+    #else
     std::cout << "Vertices: " << modelDataVertices.size() << "\n";
     std::cout << "Normals: " << modelDataNormals.size() << "\n";
     std::cout << "Tangents: " << modelDataTangents.size() << "\n";
@@ -747,28 +785,37 @@ void ObjLoader(std::string inputFile)
     std::cout << "Materials: " << materials.size() << "\n";
     std::cout << "BboxMax: {x: " << bboxMax.x << ", y: " << bboxMax.y << ", z: " << bboxMax.z << "}\n";
     std::cout << "BboxMin: {x: " << bboxMin.x << ", y: " << bboxMin.y << ", z: " << bboxMin.z << "}\n";
+    #endif
 }
 
 bool loadModel(tinygltf::Model &model, const char *filename) {
-  tinygltf::TinyGLTF loader;
-  std::string err;
-  std::string warn;
+    tinygltf::TinyGLTF loader;
+    std::string err;
+    std::string warn;
 
-  bool res = loader.LoadASCIIFromFile(&model, &err, &warn, filename);
-  if (!warn.empty()) {
-    std::cout << "WARN: " << warn << std::endl;
-  }
+    bool res = loader.LoadASCIIFromFile(&model, &err, &warn, filename);
+    if (!warn.empty()) 
+    {
+        std::cout << "WARN: " << warn << std::endl;
+    }
 
-  if (!err.empty()) {
-    std::cout << "ERR: " << err << std::endl;
-  }
+    if (!err.empty()) 
+    {
+        std::cout << "ERR: " << err << std::endl;
+    }
 
-  if (!res)
-    std::cout << "Failed to load glTF: " << filename << std::endl;
-  else
-    std::cout << "Loaded glTF: " << filename << std::endl;
-
-  return res;
+    if (!res)
+    {
+        std::cout << "Failed to load glTF: " << filename << std::endl;
+    }
+    #ifdef OPTIMIZE
+    #else
+    else
+    {
+        std::cout << "Loaded glTF: " << filename << std::endl;
+    }
+    #endif
+    return res;
 }
 
 const float* GetDataFromAccessorGLTF(const tinygltf::Model &model, const tinygltf::Accessor& accessor)
@@ -803,8 +850,10 @@ void loadGLTF(tinygltf::Model &model)
 
     for (auto &mesh : model.meshes) 
     {
+        #ifdef OPTIMIZE
+        #else
         std::cout << "mesh : " << mesh.name << std::endl;
-
+        #endif
         for (const auto& prim : mesh.primitives)
         {
 
@@ -857,6 +906,8 @@ void loadGLTF(tinygltf::Model &model)
         ComputeTangents();
     }
 
+    #ifdef OPTIMIZE
+    #else
     std::cout << "Vertices: " << modelDataVertices.size() << "\n";
     std::cout << "Normals: " << modelDataNormals.size() << "\n";
     std::cout << "Texture Coordinates: " << modelDataTextureCoordinates.size() << "\n";
@@ -864,6 +915,7 @@ void loadGLTF(tinygltf::Model &model)
     //std::cout << "Materials: " << materials.size() << "\n";
     std::cout << "BboxMax: {x: " << bboxMax.x << ", y: " << bboxMax.y << ", z: " << bboxMax.z << "}\n";
     std::cout << "BboxMin: {x: " << bboxMin.x << ", y: " << bboxMin.y << ", z: " << bboxMin.z << "}\n";
+    #endif
 
     _u8Buffer.clear();
     _u16Buffer.clear();
@@ -927,10 +979,12 @@ void BuildBVH()
     nanort::BVHBuildOptions<float> build_options;  // Use default option
     build_options.cache_bbox = false;
 
+    #ifdef OPTIMIZE
+    #else
     printf("  BVH build option:\n");
     printf("    # of leaf primitives: %d\n", build_options.min_leaf_primitives);
     printf("    SAH binsize         : %d\n", build_options.bin_size);
-
+    #endif
     //std::cout << "Vertices size: " << (sizeof(vertices) / sizeof(vertices[0])) << std::endl;
 
     nanort::TriangleMesh<float> triangle_mesh(glm::value_ptr(modelDataVertices[0]), &indexes[0], sizeof(float) * 3);
@@ -947,14 +1001,20 @@ void BuildBVH()
 
     nanort::BVHBuildStatistics stats = accelDummy.GetStatistics();
 
+    #ifdef OPTIMIZE
+    #else
     printf("  BVH statistics:\n");
     printf("    # of leaf   nodes: %d\n", stats.num_leaf_nodes);
     printf("    # of branch nodes: %d\n", stats.num_branch_nodes);
     printf("  Max tree depth     : %d\n", stats.max_tree_depth);
+    #endif
     float bmin[3], bmax[3];
     accelDummy.BoundingBox(bmin, bmax);
+    #ifdef OPTIMIZE
+    #else
     printf("  Bmin               : %f, %f, %f\n", bmin[0], bmin[1], bmin[2]);
     printf("  Bmax               : %f, %f, %f\n", bmax[0], bmax[1], bmax[2]);
+    #endif
     accel = accelDummy;
 }
 
@@ -1081,6 +1141,9 @@ int main()
      * End Read GLFT
      */
 
+    // Build the acceleration structure for ray tracing.
+    BuildBVH();
+
     geometryPass.use();
 
     #ifdef PILOT_SHIRT
@@ -1124,8 +1187,11 @@ int main()
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 
     geometryPass.use();
+    #ifdef OPTIMIZE
+    #else
     std::cout << "Albedo Width: "  << geometryPass.Width  << std::endl;
     std::cout << "Albedo Height: " << geometryPass.Height << std::endl;
+    #endif
 
     glGenTextures(1, &render);
     glBindTexture(GL_TEXTURE_2D, render);
@@ -1191,9 +1257,6 @@ int main()
 
     int halfWidth = WIDTH/2, halfHeight = HEIGHT/2;
 
-    // Build the acceleration structure for ray tracing.
-    BuildBVH();
-
     glm::vec3 hitPos = glm::vec3(0.0, 0.0, 0.0);
     glm::vec3 hitNor = glm::vec3(1.0, 1.0, 1.0);
 
@@ -1215,7 +1278,10 @@ int main()
         {
             //decalsPass.createTexture(&decalTexture, "Assets/Textures/WatchMen.jpeg", "iChannel0", 1);
             //decalsPass.createTextureFromFile(&decalTexture, decalImageBuffer, widthDecal, heightDecal, "iChannel0", 1);
+            #ifdef OPTIMIZE
+            #else
             std::cout << "Changing texture" << std::endl;
+            #endif
             flip = 1;
             glGenTextures(1, &decalTexture);
             glBindTexture(GL_TEXTURE_2D, decalTexture);
@@ -1318,7 +1384,10 @@ int main()
 			if ((buttons & SDL_BUTTON_LMASK) != 0) 
 			{
 				clicked = true;
+                #ifdef OPTIMIZE
+                #else
 				std::cout << "Mouse Button 1 (left) is pressed.\n";
+                #endif
 			}
 			else
 			{
@@ -1359,7 +1428,10 @@ int main()
 
             if ((buttons & SDL_BUTTON_RMASK) != 0)
             {
+                #ifdef OPTIMIZE
+                #else
                 std::cout << "Right button pressed!" << std::endl;
+                #endif
                 glm::vec4 NDCPos      = glm::vec4((2.0f * float(mousePositionX)) / widthHeight.x - 1.0f, 
                                                    1.0f - (2.0f * float(mousePositionY)) / widthHeight.y, 
                                                    1.0f, 
@@ -1410,10 +1482,12 @@ int main()
                     projectorProjection = glm::ortho(-projectorSize, projectorSize, -proportionateHeight, proportionateHeight, 0.001f, FAR_PLANE);
 
                     decalProjector = projectorProjection * projectorView;
-
+                    #ifdef OPTIMIZE
+                    #else
                     printf("Hit Point: %s\n", glm::to_string(hitPos).c_str());
                     printf("Hit Normal: %s\n", glm::to_string(hitNor).c_str());
                     printf("Decal Projector: %s\n", glm::to_string(decalProjector).c_str());
+                    #endif
                 }
             }
 

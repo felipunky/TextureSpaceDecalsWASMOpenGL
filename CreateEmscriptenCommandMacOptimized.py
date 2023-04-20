@@ -22,7 +22,7 @@ imGuizmoPath = "/Users/felipe/Documents/GitHub/ImGuizmo/ImGuizmo/"
 nanoRTPath = "/Users/felipe/Documents/Graphics/nanort/ "
 rendererClass = ""
 if optimize:
-    optimizationLevel = "-O3 "
+    optimizationLevel = "-O2 "
 else:
     optimizationLevel = ""
 if renderer:
@@ -50,7 +50,7 @@ emscriptenCommand = "emcc " + \
                     "-I" + nanoRTPath + \
                     "-v --embed-file " + shaderPath + " " + \
                     "-v --preload-file " + assetsPath + " " + \
-                    "-s FULL_ES3=1 " + \
+                    "-s FULL_ES3=0 " + \
                     "-s WASM=1 " + \
                     "-s USE_SDL=2 " + \
                     "-s GL_DEBUG=0 " + \

@@ -33,6 +33,9 @@
 #if 0
     #define EXCEPTIONS
 #endif
+#if 1
+	#define OPTIMIZE
+#endif
 
 // Shader class taken from, there are some functions that are implemented by me: 
 // https://learnopengl.com/code_viewer_gh.php?code=includes/learnopengl/shader_m.h
@@ -207,8 +210,10 @@ public:
 		Width  = width;
 		Height = height;
 
+		#ifdef OPTIMIZE
+		#else
 		std::cout << "Original texture data: " << +data[0] << std::endl;
-
+		#endif
 		// Get the texture format automatically.
 		auto format = GL_RGB;
 		if (channels == 4)

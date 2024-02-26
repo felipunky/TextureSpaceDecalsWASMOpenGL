@@ -1434,17 +1434,25 @@ int main()
                 #else
                 std::cout << "Right button pressed!" << std::endl;
                 #endif
-                glm::vec4 NDCPos      = glm::vec4((2.0f * float(mousePositionX)) / widthHeight.x - 1.0f, 
-                                                   1.0f - (2.0f * float(mousePositionY)) / widthHeight.y, 
-                                                   1.0f, 
-                                                   1.0f);
-                glm::mat4 inverseModel = glm::inverse(model);
-                glm::vec4 viewCoords   = glm::inverse(projection) * NDCPos;
-                viewCoords             = glm::inverse(view) * viewCoords;
-                glm::vec4 worldCoords  = inverseModel * glm::vec4(viewCoords.x, viewCoords.y, -1.0f, 0.0f);
+                
+                // https://stackoverflow.com/questions/53467077/opengl-ray-tracing-using-inverse-transformations
+                glm::vec2 normalizedMouse = glm::vec2(2.0f, 2.0f) * glm::vec2(mousePositionX, mousePositionY) / widthHeight;
+                float x_ndc = normalizedMouse.x - 1.0;
+                float y_ndc = 1.0 - normalizedMouse.y; // flipped
 
-                glm::vec3 rayDir = glm::normalize(glm::vec3(worldCoords));
-                glm::vec3 rayOri = glm::vec3(inverseModel * glm::vec4(camPos.x, camPos.y, camPos.z, 1.0f));
+                glm::vec4 p_near_ndc = glm::vec4(x_ndc, y_ndc, -1.0f, 1.0f); // z near = -1
+                glm::vec4 p_far_ndc  = glm::vec4(x_ndc, y_ndc,  1.0f, 1.0f); // z far = 1
+
+                glm::mat4 invMVP = glm::inverse(projection * view * model);
+
+                glm::vec4 p_near_h = invMVP * p_near_ndc;
+                glm::vec4 p_far_h  = invMVP * p_far_ndc;
+
+                glm::vec3 p0 = glm::vec3(p_near_h) / glm::vec3(p_near_h.w, p_near_h.w, p_near_h.w);
+                glm::vec3 p1 = glm::vec3(p_far_h)  / glm::vec3(p_far_h.w, p_far_h.w, p_far_h.w);
+
+                glm::vec3 rayOri = p0;
+                glm::vec3 rayDir = glm::normalize(p1 - p0);
 
                 nanort::Ray<float> ray;
                 ray.org[0] = rayOri.x;

@@ -1,18 +1,17 @@
 #version 300 es
 precision mediump float;
 
-//in vec2 TexCoords;
 in vec3 positions;                               
 in vec2 TexCoords;
 in mat3 TBN; 
+
+out vec4 FragColor;
 
 uniform sampler2D gNormal;
 uniform sampler2D gAlbedo;
 uniform sampler2D gMetallic;
 uniform sampler2D gRoughness;
 uniform sampler2D gAO;
-
-out vec4 FragColor;
 
 uniform vec3 viewPos;
 uniform float iTime;
@@ -104,7 +103,7 @@ void main()
         float spe = pow(max(dot(N, halfWayVector), 0.0), 32.0);
 
         vec3 col = albedo * max(0., dot(L, -N));
-        col += spe * 0.4;
+        col += spe * vec3(0.4);
 
         FragColor = vec4(pow(col, vec3(2.2)), 1.0);
 

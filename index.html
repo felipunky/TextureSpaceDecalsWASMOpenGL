@@ -28,8 +28,8 @@
         let clicked = 0;
         let sizeData = [0, 0, 0];
         let downloadImage = 0;
-        let widthDecal  = 4096;
-        let heightDecal = 4096;
+        let widthDecal  = 1024;
+        let heightDecal = 1024;
         let flipOnDownload = 0;
         let res;
         let cvDrawImg;
@@ -71,6 +71,8 @@
                     cv.id = "previewCanvas";
                     cv.height = imgAlbedo.height;
                     cv.width = imgAlbedo.width;
+                    widthDecal = cv.width;
+                    heightDecal = cv.height;
                     flipAlbedo = 1;
                     sizeData = [cv.width, cv.height, flipAlbedo];
 
@@ -225,6 +227,7 @@
                 var buffer = _malloc(text.length + 1);
                 stringToUTF8(text, buffer, text.length + 1);
                 ccall("passObj", "null", ["number"], [buffer]);
+                _free(buffer);
             }
 
             // GLTF Input
@@ -243,6 +246,7 @@
                 var buffer = _malloc(text.length + 1);
                 stringToUTF8(text, buffer, text.length + 1);
                 ccall("passGLTF", "null", ["number"], [buffer]);
+                _free(buffer);
             }
 
             document.getElementById('download').addEventListener("click", function(e) 

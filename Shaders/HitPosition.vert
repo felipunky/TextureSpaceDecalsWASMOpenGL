@@ -4,11 +4,11 @@ precision mediump float;
 layout (location = 0) in vec3 Position;
 layout (location = 1) in vec2 TexCoords;
 
+out vec2 texCoords;
+
 uniform mat4 projection;
 uniform mat4 view;
 uniform mat4 model;
-
-out vec2 texCoords;
 
 void main()
 {

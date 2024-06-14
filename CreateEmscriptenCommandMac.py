@@ -5,6 +5,8 @@ withAssertions = False
 renderer = False
 optimize = True
 
+runtimeModules = "-sEXPORTED_RUNTIME_METHODS=ccall "
+
 appPath = "/Users/felipe/Documents/Yukan/ShirtGenerator"
 imguiPath = "/Users/felipe/Documents/Graphics/imgui/imgui/"
 imguiBackendPath = imguiPath + "backends/"
@@ -22,9 +24,9 @@ imGuizmoPath = "/Users/felipe/Documents/GitHub/ImGuizmo/ImGuizmo/"
 nanoRTPath = "/Users/felipe/Documents/Graphics/nanort/ "
 rendererClass = ""
 if optimize:
-    optimizationLevel = "-O2 "
+    optimizationLevel = "-O1 -fno-exceptions "
 else:
-    optimizationLevel = ""
+    optimizationLevel = "-O2 "
 if renderer:
     rendererClass = "Renderer.cpp "
 assertions = ""
@@ -60,6 +62,7 @@ emscriptenCommand = "emcc " + \
                     "-s ALLOW_MEMORY_GROWTH=1 " + \
                     optimizationLevel + \
                     assertions + \
+                    runtimeModules + \
                     "-o index.js"
 print(emscriptenCommand)
 

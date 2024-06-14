@@ -1,6 +1,9 @@
 #version 300 es
 precision mediump float;
 
+in vec2 TexCoords;
+in vec3 WorldPos;
+
 out vec4 FragColor;
 
 uniform mat4 model;                                        
@@ -12,12 +15,9 @@ uniform vec2 iResolution;
 uniform sampler2D iChannel0;
 uniform sampler2D iChannel1;
 uniform sampler2D iDepth;
-uniform float iScale;
+uniform int iScale;
 uniform float iFlip;
 uniform float iBlend;
-
-in vec2 TexCoords;
-in vec3 WorldPos;
 
 #define BIAS 1e-5
 
@@ -48,13 +48,13 @@ void main()
         decalUV.y = 1. - decalUV.y;
     }
 
-    decalUV *= iScale;
+    decalUV = decalUV * float(iScale);
 
     vec4 projectedDecal = texture(iChannel0, decalUV.xy);
     vec4 albedoMap      = texture(iChannel1, texCoords);
 
     // Sample the decal texture using the Decal UVs.
     projectedDecal = mix(projectedDecal, albedoMap, iBlend) * clip;
-    albedoMap      *= 1. - clip;
+    albedoMap      *= vec4(1. - clip);
     FragColor = projectedDecal + albedoMap;
 }

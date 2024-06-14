@@ -72,6 +72,23 @@
         "filesystem": "cpp",
         "__tree": "cpp",
         "map": "cpp",
-        "thread": "cpp"
+        "thread": "cpp",
+        "charconv": "cpp",
+        "codecvt": "cpp",
+        "condition_variable": "cpp",
+        "format": "cpp",
+        "list": "cpp",
+        "numbers": "cpp",
+        "numeric": "cpp",
+        "queue": "cpp",
+        "random": "cpp",
+        "ranges": "cpp",
+        "semaphore": "cpp",
+        "set": "cpp",
+        "span": "cpp",
+        "*.tcc": "cpp",
+        "memory_resource": "cpp",
+        "stop_token": "cpp",
+        "cinttypes": "cpp"
     }
 }

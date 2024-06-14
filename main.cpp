@@ -29,7 +29,10 @@
 #endif
 
 #define PROJECTOR_DISTANCE 50.0f
-#define FAR_PLANE 1000.0F
+#define FAR_PLANE  1000.0f
+#define NEAR_PLANE 1e-5
+#define RADIANS_30 glm::radians(30.0f)
+#define RADIANS_45 glm::radians(45.0f)
 #if 1
     #define PILOT_SHIRT
 #endif
@@ -46,11 +49,26 @@ uint8_t reload = 0u;
 uint8_t downloadImage = 0u;
 std::vector<uint8_t> decalImageBuffer;
 std::vector<uint8_t> decalResult;
-uint16_t widthDecal = 4509u, heightDecal = 2798u, changeDecal = 0u,
+uint16_t widthDecal = 1127u, heightDecal = 699u, changeDecal = 0u,
          widthAlbedo,        heightAlbedo,        changeAlbedo = 0u;
 Shader geometryPass = Shader();
-unsigned int render;
+unsigned int renderAlbedo;
 unsigned int fbo;
+
+float near          = 0.1f;
+float far           = 200.0f;
+float focalDistance = 3.0f;
+float radius        = 1.0f;
+
+glm::vec3 bboxMin  = glm::vec3(1e+5);
+glm::vec3 bboxMax  = glm::vec3(-1e+5);
+glm::vec3 centroid = glm::vec3(-1e+5);
+glm::vec3 camPos;
+glm::vec3 camFront = glm::vec3( 0.0f, 0.0f, -1.0f );
+glm::vec3 camUp = glm::vec3( 0.0f, 1.0f, 0.0f );
+glm::vec3 differenceBboxMaxMin;
+
+glm::mat4 model = glm::mat4(1.0f);
 
 nanort::BVHAccel<float> accel;
 unsigned int VBOVertices, VBONormals, VBOTextureCoordinates, VBOTangents, VAO, EBO;
@@ -60,7 +78,7 @@ std::vector<uint8_t> uploadImage()
     unsigned int bufferSize = 4 * geometryPass.Width * geometryPass.Height;
     std::vector<uint8_t> buffer(bufferSize);
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
-    glReadBuffer(GL_FRONT);
+    glReadBuffer(GL_COLOR_ATTACHMENT0);
     glReadPixels(0, 0, geometryPass.Width, geometryPass.Height, GL_RGBA, GL_UNSIGNED_BYTE, buffer.data());
     return buffer;
 }
@@ -82,6 +100,7 @@ std::vector<uint8_t> loadArray(uint8_t* buf, int bufSize)
 void reloadModel();
 void ObjLoader(std::string inputFile);
 void loadGLTF(tinygltf::Model &model);
+void recomputeCamera();
 
 struct Material
 {
@@ -92,6 +111,13 @@ struct Material
     unsigned int ao;
 };
 
+void clearBBox(glm::vec3& bboxMin, glm::vec3& bboxMax, glm::vec3& centroid)
+{
+    bboxMin  = glm::vec3(1e+5);
+    bboxMax  = glm::vec3(-1e+5);
+    centroid = glm::vec3(-1e+5);
+}
+
 Material material;
 
 bool isGLTF = false;
@@ -101,6 +127,7 @@ extern "C"
     EMSCRIPTEN_KEEPALIVE
     void passGLTF(char* buf)
     {
+        //clearBBox(bboxMin, bboxMax, centroid);
         std::string result = buf;
         tinygltf::Model model;
         std::vector<unsigned char> data(result.begin(), result.end());
@@ -115,6 +142,7 @@ extern "C"
         }
         loadGLTF(model);
         reloadModel();
+        recomputeCamera();
         isGLTF = true;
         data.clear();
         free(buf);
@@ -123,9 +151,12 @@ extern "C"
     void passObj(char* buf)
     {
         //std::cout << "New mesh content: " << buf << std::endl;
+        //clearBBox(bboxMin, bboxMax, centroid);
+        std::cout << "BBox Cleared Center: {x: " << centroid.x << ", y: " << centroid.y << ", z:" << centroid.z << "}\n";
         std::string result = buf;
         ObjLoader(result);
         reloadModel();
+        recomputeCamera();
         isGLTF = false;
         free(buf);
     }
@@ -171,17 +202,17 @@ extern "C"
         #else
         std::cout << "Albedo size changed regenerating glTexImage2D" << std::endl;
         #endif
-        glDeleteTextures(1, &render);
+        glDeleteTextures(1, &renderAlbedo);
         glDeleteTextures(1, &(material.baseColor));
 
         glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 
-        glGenTextures(1, &render);
-        glBindTexture(GL_TEXTURE_2D, render);
+        glGenTextures(1, &renderAlbedo);
+        glBindTexture(GL_TEXTURE_2D, renderAlbedo);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, geometryPass.Width, geometryPass.Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, render, 0);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderAlbedo, 0);
         
         #ifdef OPTIMIZE
         #else
@@ -218,17 +249,17 @@ extern "C"
         #else
         std::cout << "Normal size changed regenerating glTexImage2D" << std::endl;
         #endif
-        glDeleteTextures(1, &render);
+        glDeleteTextures(1, &renderAlbedo);
         glDeleteTextures(1, &(material.normal));
 
         glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 
-        glGenTextures(1, &render);
-        glBindTexture(GL_TEXTURE_2D, render);
+        glGenTextures(1, &renderAlbedo);
+        glBindTexture(GL_TEXTURE_2D, renderAlbedo);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, geometryPass.Width, geometryPass.Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, render, 0);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderAlbedo, 0);
 
         geometryPass.Width  = width;
         geometryPass.Height = height;
@@ -312,19 +343,15 @@ std::vector<glm::vec2> modelDataTextureCoordinates;
 std::vector<glm::vec4> modelDataTangents;
 std::vector<tinyobj::material_t> modelDataMaterial;
 std::map<std::string, GLuint> modelDataTextures;
-std::vector<unsigned int> indexes,
-                          meshRawIndexes;
-glm::vec3 bboxMin = glm::vec3(1e+5);
-glm::vec3 bboxMax = glm::vec3(-1e+5);
-glm::vec3 centroid;
+std::vector<unsigned int> indexes;
 
 // Projector
 glm::vec3 projectorPos;
 glm::vec3 projectorDir;
-glm::mat4 projectorView;
-glm::mat4 projectorProjection;
+// glm::mat4 projectorView;
+// glm::mat4 projectorProjection;
 glm::mat4 decalProjector;
-float     projectorSize     = 0.1f;
+float     projectorSize     = 0.5f;
 float     projectorRotation = 0.0f;
 
 int lastUsing = 0;
@@ -339,6 +366,118 @@ const glm::vec4 kFrustumCorners[] = {
     glm::vec4(1.0f, 1.0f, -1.0f, 1.0f),   // Near-Top-Right
     glm::vec4(1.0f, -1.0f, -1.0f, 1.0f)   // Near-Bottom-Right
 };
+
+std::array<glm::vec3, 8> cubeCorners(const glm::vec3& min, const glm::vec3& max) 
+{
+    std::array<glm::vec3, 8> kCubeCorners = {
+        glm::vec3(min.x, min.y, max.z),  // Far-Bottom-Left   
+        glm::vec3(min.x, max.y, max.z),  // Far-Top-Left      
+        max,                             // Far-Top-Right     
+        glm::vec3(max.x, min.y, max.z),  // Far-Bottom-Right  
+        min,                             // Near-Bottom-Left  
+        glm::vec3(min.x, max.y, min.z),  // Near-Top-Left     
+        glm::vec3(max.x, max.y, min.z),  // Near-Top-Right    
+        glm::vec3(max.x, min.y, min.z)   // Near-Bottom-Right 
+    };
+    return kCubeCorners;
+}
+
+void rayTrace(const int& mousePositionX, const int& mousePositionY, const glm::vec2& widthHeight, 
+              const std::vector<glm::vec3>& modelDataVertices, const std::vector<unsigned int>& indexes, 
+              const glm::mat4& projection, const glm::mat4& view, const glm::mat4& model, const bool& debug,
+              /** Out **/
+              glm::vec3& hitNor, glm::vec3& hitPos, glm::mat4& decalProjector)
+{
+    #ifdef OPTIMIZE
+    #else
+    std::cout << "Right button pressed!" << std::endl;
+    #endif
+    
+    // https://stackoverflow.com/questions/53467077/opengl-ray-tracing-using-inverse-transformations
+    glm::vec2 normalizedMouse = glm::vec2(2.0f, 2.0f) * glm::vec2(mousePositionX, mousePositionY) / widthHeight;
+    float x_ndc = normalizedMouse.x - 1.0;
+    float y_ndc = 1.0 - normalizedMouse.y; // flipped
+
+    glm::vec4 p_near_ndc = glm::vec4(x_ndc, y_ndc, -1.0f, 1.0f); // z near = -1
+    glm::vec4 p_far_ndc  = glm::vec4(x_ndc, y_ndc,  1.0f, 1.0f); // z far = 1
+
+    glm::mat4 invMVP = glm::inverse(projection * view * model);
+
+    glm::vec4 p_near_h = invMVP * p_near_ndc;
+    glm::vec4 p_far_h  = invMVP * p_far_ndc;
+
+    glm::vec3 p0 = glm::vec3(p_near_h) / glm::vec3(p_near_h.w, p_near_h.w, p_near_h.w);
+    glm::vec3 p1 = glm::vec3(p_far_h)  / glm::vec3(p_far_h.w, p_far_h.w, p_far_h.w);
+
+    glm::vec3 rayOri = p0;
+    glm::vec3 rayDir = glm::normalize(p1 - p0);
+
+    nanort::Ray<float> ray;
+    ray.org[0] = rayOri.x;
+    ray.org[1] = rayOri.y;
+    ray.org[2] = rayOri.z;
+
+    ray.dir[0] = rayDir.x;
+    ray.dir[1] = rayDir.y;
+    ray.dir[2] = rayDir.z;
+
+    float kFar = 1.0e+30f;
+    ray.min_t = 0.0f;
+    ray.max_t = kFar;
+
+    nanort::TriangleIntersector<> triangle_intersector(glm::value_ptr(modelDataVertices[0]), &indexes[0], sizeof(float) * 3);
+    nanort::TriangleIntersection<> isect;
+    bool hit = accel.Traverse(ray, triangle_intersector, &isect);
+    if (hit)
+    {
+        hitPos = rayOri + rayDir * isect.t;
+        
+        unsigned int fid = isect.prim_id;
+        unsigned int id  = indexes[3 * fid];
+        hitNor = modelDataNormals[id];
+
+        projectorPos = hitPos + hitNor * PROJECTOR_DISTANCE;
+        projectorDir = -hitNor;
+
+        float ratio = float(heightDecal) / float(widthDecal);
+        float proportionateHeight = projectorSize * ratio;
+
+        glm::mat4 rotate = glm::mat4(1.0f);
+        rotate = glm::rotate(rotate, glm::radians(projectorRotation), projectorDir);
+
+        glm::vec4 axis                = rotate * glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
+        glm::mat4 projectorView       = glm::lookAt(projectorPos, hitPos, axis.xyz());
+        glm::mat4 projectorProjection = glm::ortho(-projectorSize, projectorSize, -proportionateHeight, proportionateHeight, 0.001f, FAR_PLANE);
+
+        decalProjector = projectorProjection * projectorView;
+        if (debug)
+        {
+            printf("Hit Point: %s\n", glm::to_string(hitPos).c_str());
+            printf("Hit Normal: %s\n", glm::to_string(hitNor).c_str());
+            printf("Decal Projector: %s\n", glm::to_string(decalProjector).c_str());
+        }
+    }
+}
+
+// Returns near .x far .y
+glm::vec3 calculateNearFarPlane()
+{
+    // https://community.khronos.org/t/automatically-center-3d-object/20892/6
+    glm::vec3 nearFarPlaneBSphere = bboxMax - centroid;
+    float r = glm::length(nearFarPlaneBSphere);
+    //float r = glm::dot(nearFarPlaneBSphere, nearFarPlaneBSphere);
+
+    float fDistance = r / 0.57735f; // where 0.57735f is tan(30 degrees)
+    // The near and far clipping planes then lay either side of this point, allwoing for the radius of the sphere. So -
+    // dNear = fDistance - r;
+    // dFar  = fDistance + r;
+    glm::vec2 result = glm::vec2(fDistance, fDistance) + glm::vec2(-r, r);
+    near          = result.x;
+    far           = result.y;
+    focalDistance = fDistance;
+    radius        = r;
+    return nearFarPlaneBSphere;
+}
 
 void renderLineStrip(glm::vec3* vertices, const int& count)
 {
@@ -374,6 +513,22 @@ void renderLine(glm::vec3& A, glm::vec3& B)
     
     glDrawArrays(GL_LINES, 0, 2);
     glBindVertexArray(0);
+}
+
+void renderLineCube(const glm::vec3& min, const glm::vec3& max)
+{
+    std::array<glm::vec3, 8> corners = cubeCorners(min, max);
+    
+    glm::vec3 _far[5] = { corners[0], corners[1], corners[2], corners[3], corners[0] };
+    renderLineStrip(&_far[0], 5);
+
+    glm::vec3 _near[5] = { corners[4], corners[5], corners[6], corners[7], corners[4] };
+    renderLineStrip(&_near[0], 5);
+
+    renderLine(corners[0], corners[4]);
+    renderLine(corners[1], corners[5]);
+    renderLine(corners[2], corners[6]);
+    renderLine(corners[3], corners[7]);
 }
 
 void renderFrustum(const glm::mat4& view_proj)
@@ -557,15 +712,17 @@ void EditTransform(float* cameraView, float* cameraProjection, float* matrix, bo
 
         switch (mCurrentGizmoOperation)
         {
-        case ImGuizmo::TRANSLATE:
-            ImGui::InputFloat3("Snap", &snap[0]);
-            break;
-        case ImGuizmo::ROTATE:
-            ImGui::InputFloat("Angle Snap", &snap[0]);
-            break;
-        case ImGuizmo::SCALE:
-            ImGui::InputFloat("Scale Snap", &snap[0]);
-            break;
+            case ImGuizmo::TRANSLATE:
+                ImGui::InputFloat3("Snap", &snap[0]);
+                break;
+            case ImGuizmo::ROTATE:
+                ImGui::InputFloat("Angle Snap", &snap[0]);
+                break;
+            case ImGuizmo::SCALE:
+                ImGui::InputFloat("Scale Snap", &snap[0]);
+                break;
+            default:
+                break;
         }
         ImGui::Checkbox("Bound Sizing", &boundSizing);
         if (boundSizing)
@@ -599,7 +756,7 @@ void EditTransform(float* cameraView, float* cameraProjection, float* matrix, bo
    }
    else
    {
-      ImGuizmo::SetRect(0, 0, io.DisplaySize.x, io.DisplaySize.y);
+      ImGuizmo::SetRect(0, 0, io.DisplaySize.x/2, io.DisplaySize.y);
    }
    ImGuizmo::Manipulate(cameraView, cameraProjection, mCurrentGizmoOperation, mCurrentGizmoMode, matrix, NULL, useSnap ? &snap[0] : NULL, boundSizing ? bounds : NULL, boundSizingSnap ? boundsSnap : NULL);
 }
@@ -773,8 +930,11 @@ void ObjLoader(std::string inputFile)
             }
         }
     }
-
+    centroid = (bboxMin + bboxMax) * 0.5f;
     ComputeTangents();
+
+    std::cout << "BboxMax: {x: " << bboxMax.x << ", y: " << bboxMax.y << ", z: " << bboxMax.z << "}\n";
+    std::cout << "BboxMin: {x: " << bboxMin.x << ", y: " << bboxMin.y << ", z: " << bboxMin.z << "}\n";
 
     #ifdef OPTIMIZE
     #else
@@ -916,6 +1076,15 @@ void loadGLTF(tinygltf::Model &model)
     std::cout << "BboxMax: {x: " << bboxMax.x << ", y: " << bboxMax.y << ", z: " << bboxMax.z << "}\n";
     std::cout << "BboxMin: {x: " << bboxMin.x << ", y: " << bboxMin.y << ", z: " << bboxMin.z << "}\n";
     #endif
+    for (int i = 0; i < modelDataVertices.size(); ++i)
+    {
+        glm::vec3 vertex = modelDataVertices[i];
+        bboxMin = glm::min(vertex, bboxMin);
+        bboxMax = glm::max(vertex, bboxMax);
+    }
+    centroid = (bboxMin + bboxMax) * 0.5f;
+    std::cout << "BboxMax: {x: " << bboxMax.x << ", y: " << bboxMax.y << ", z: " << bboxMax.z << "}\n";
+    std::cout << "BboxMin: {x: " << bboxMin.x << ", y: " << bboxMin.y << ", z: " << bboxMin.z << "}\n";
 
     _u8Buffer.clear();
     _u16Buffer.clear();
@@ -1020,10 +1189,33 @@ void BuildBVH()
     accel = accelDummy;
 }
 
+void recomputeCamera()
+{
+    glm::vec3 diff = calculateNearFarPlane() / radius;
+    camPos   = centroid + diff * glm::vec3(0.0f, 0.0f, (far - near));
+    camFront = glm::normalize(centroid - camPos);
+	camUp    = glm::vec3(0.0f, 1.0f, 0.0f);
+    std::cout << "Dif: " << glm::to_string(diff) << "\n";
+    std::cout << "camPos: " << glm::to_string(camPos) << "\n";
+    std::cout << "camFront: " << glm::to_string(camFront) << "\n";
+    std::cout << "Radius: " << radius << "\n";
+    std::cout << "Centroid: " << glm::to_string(centroid) << "\n";
+    std::cout << "Focal Distance: " << focalDistance << "\n";
+    std::cout << "Near: " << near << "\n";
+    std::cout << "Far: " << far << "\n";
+}
+
 void reloadModel()
 {
     BuildBVH();
     CreateBOs();
+    model = glm::mat4(1.0f);
+    std::cout << "Recomputed BBox Center: {x: " << centroid.x << ", y: " << centroid.y << ", z:" << centroid.z << "}\n";
+}
+
+float max(const glm::vec3& x)
+{
+    return std::max(std::max(x.x, x.y), x.z);
 }
 
 int main()
@@ -1031,10 +1223,10 @@ int main()
     /**
      * Start Window
      */
-    int screenWidth, screenHeight;
+    int screenWidth = WIDTH, screenHeight = HEIGHT;
     
     SDL_Window* window;
-    SDL_CreateWindowAndRenderer(WIDTH, HEIGHT, 0, &window, nullptr);
+    SDL_CreateWindowAndRenderer(screenWidth, screenHeight, 0, &window, nullptr);
     
     SDL_GLContext context = SDL_GL_CreateContext(window);
     SDL_GL_MakeCurrent(window, context);
@@ -1091,15 +1283,10 @@ int main()
     bool mouseInsideOfWindow;
     bool clicked = false;
 
-	const float SPEED = 5.0f;
-	glm::vec3 camPos = glm::vec3( 0.0f, -0.7f, 5.0f ); 
-	glm::vec3 camFront = glm::vec3( 0.0f, 0.0f, -1.0f );
-	glm::vec3 camUp = glm::vec3( 0.0f, 1.0f, 0.0f );
-
     float time = 0.0f;
 	// Mouse rotation globals.
 	bool firstMouse = true;
-	float lastX = ( float )( WIDTH ) / 2.0F, 
+	float lastX = ( float )( WIDTH ) * 0.5f, 
           lastY = ( float )( HEIGHT ), 
           yaw = -90.0f, 
           pitch = 0.0f;
@@ -1113,6 +1300,7 @@ int main()
     /**
      * Start Shader Setup
      */
+    Shader depthPrePass  = Shader("Shaders/DBuffer.vert",      "Shaders/DBuffer.frag");   
     geometryPass         = Shader("Shaders/GBuffer.vert",      "Shaders/GBuffer.frag");   
     Shader deferredPass  = Shader("Shaders/DeferredPass.vert", "Shaders/DeferredPass.frag");
     Shader hitPosition   = Shader("Shaders/HitPosition.vert",  "Shaders/HitPosition.frag");
@@ -1122,6 +1310,7 @@ int main()
 
     #ifdef PILOT_SHIRT
     std::string fileName = "Assets/Pilot/shirt_1_lowPoly.gltf";
+    //std::string fileName = "Assets/utahTeapot.gltf";
     #else
     std::string fileName = "Assets/t-shirt-lp/source/Shirt.gltf";
     #endif
@@ -1146,6 +1335,11 @@ int main()
     // Build the acceleration structure for ray tracing.
     BuildBVH();
 
+    const float SPEED = 5.0f;
+    //centroid = (bboxMin + bboxMax) * 0.5f;
+    std::cout << "BBox Center: {x: " << centroid.x << ", y: " << centroid.y << ", z:" << centroid.z << "}\n";
+	//camPos = centroid + glm::vec3(0.0f, 0.0f, 5.0f);//glm::vec3( 0.0f, -0.7f, 5.0f ); 
+
     geometryPass.use();
 
     #ifdef PILOT_SHIRT
@@ -1166,25 +1360,48 @@ int main()
 
     #endif
 
-    unsigned int gBuffer;
-    glGenFramebuffers(1, &gBuffer);
-    glBindFramebuffer(GL_FRAMEBUFFER, gBuffer);
+    /** Start Depth Buffer **/
+    unsigned int dBuffer;
+    glGenFramebuffers(1, &dBuffer);
+    glBindFramebuffer(GL_FRAMEBUFFER, dBuffer);
+
+    depthPrePass.use();
+
     unsigned int rboDepth;
 
     // create and attach depth buffer (renderbuffer)
     glGenTextures(1, &rboDepth);
     glBindTexture(GL_TEXTURE_2D, rboDepth);
+    #if 0
     glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, WIDTH/4, HEIGHT/4, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, rboDepth, 0);
+    #else
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, WIDTH/4, HEIGHT/4, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, NULL);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST); 
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+    glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_NONE);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, rboDepth, 0);
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) 
+    {
+        std::cerr << "Framebuffer configuration failed" << std::endl;
+    }
+    #endif
 
     unsigned int attachments[1] = {GL_NONE};
     glDrawBuffers(1, attachments);
 
-    // Render to texture space.
+    /** End Depth Buffer **/
+
+    /** Start Texture Space Buffer **/
     glGenFramebuffers(1, &fbo);
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 
@@ -1195,12 +1412,12 @@ int main()
     std::cout << "Albedo Height: " << geometryPass.Height << std::endl;
     #endif
 
-    glGenTextures(1, &render);
-    glBindTexture(GL_TEXTURE_2D, render);
+    glGenTextures(1, &renderAlbedo);
+    glBindTexture(GL_TEXTURE_2D, renderAlbedo);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, geometryPass.Width, geometryPass.Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, render, 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderAlbedo, 0);
 
     // Set the list of draw buffers.
     unsigned int drawBuffersFBO[1] = {GL_COLOR_ATTACHMENT0};
@@ -1216,6 +1433,7 @@ int main()
     // deferredPass.setInt("gMetallic",  2);
     // deferredPass.setInt("gRoughness", 3);
     // deferredPass.setInt("gAO",        4);
+    /** End Texture Space Buffer **/
 
     /**
      * End Shader Setup
@@ -1232,19 +1450,18 @@ int main()
     /**
      * End Geometry Definition
      */
-
+    bool showBBox      = false;
     bool showProjector = false;
     bool showHitPoint  = false;
     bool normalMap     = false;
     
-    float scale = 1.0f;
+    int scale = 1;
     float blend = 0.5f;
 	bool insideImGui = false;
     
 	// Create the camera (eye).
 	glm::mat4 view = glm::mat4(1.0f);
-	glm::mat4 model = glm::mat4(1.0f);
-    centroid = bboxMax * glm::vec3(0.5) + bboxMin * glm::vec3(0.5);
+	model = glm::mat4(1.0f);
 
     float iTime = 0.0f;
 
@@ -1269,13 +1486,31 @@ int main()
     float zoomSide = 0.5f,
           zoomTop  = zoomSide;
 
-    model = glm::mat4(1.0f);
-    model = glm::translate(model, -centroid);
-
     glm::mat4 modelNoGuizmo = model;
+
+    mousePositionX = screenWidth / 4;
+    mousePositionY = screenHeight / 2;
+    mousePositionX = mousePositionX + screenWidth / 4;
+
+    glm::vec2 widthHeight = glm::vec2(screenWidth, screenHeight);
+
+    recomputeCamera();
+
+    glm::mat4 projection = glm::perspective(RADIANS_30, widthHeight.x / widthHeight.y, near, far);
+    view = glm::lookAt(camPos, camPos + camFront, camUp);
+    glm::mat4 viewPinned = view;
+
+    rayTrace(mousePositionX, mousePositionY, widthHeight, modelDataVertices, 
+             indexes, projection, view, model, true,
+             /** Out **/ hitNor, hitPos, decalProjector);
 
     loop = [&]
     {
+        //model = glm::mat4(1.0f);
+        //model = glm::scale(model, glm::vec3(rNearFar));
+        //model = glm::translate(model, -centroid);
+        //modelNoGuizmo = model;
+        
         if (decalImageBuffer.size() > 0)
         {
             //decalsPass.createTexture(&decalTexture, "Assets/Textures/WatchMen.jpeg", "iChannel0", 1);
@@ -1293,7 +1528,7 @@ int main()
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
             // Texture filtering params.
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
             // Get the texture format automatically.
@@ -1364,17 +1599,18 @@ int main()
 
         //std::cout << glm::to_string(view) << std::endl;
 
-        glm::vec2 widthHeight = glm::vec2(screenWidth, screenHeight);
+        widthHeight = glm::vec2(screenWidth, screenHeight);
 
         // No need to compute this every frame as the FOV stays always the same.
         glm::vec2 halfWidthHeight = widthHeight * glm::vec2(0.5, 0.5);
         float aspect = halfWidthHeight.x / halfWidthHeight.y;
-        float near = 0.1f;
-        float far = 200.0f;
 
-		glm::mat4 projection     = glm::perspective( glm::radians( 45.0f ), widthHeight.x / widthHeight.y, near, far);
-        glm::mat4 projectionHalf = glm::perspective( glm::radians( 45.0f ), halfWidthHeight.x / widthHeight.y, near, far);                                       
-        glm::mat4 projectionSide = glm::ortho(-aspect, aspect, -1.0f, 1.0f, near, far);
+        // calculateNearFarPlane(bboxMax, centroid, /** Out **/ near, far);
+        // differenceBboxMaxMin = bboxMax - bboxMin;
+		projection               = glm::perspective(RADIANS_30, widthHeight.x / widthHeight.y, near, far);
+        glm::mat4 projectionHalf = glm::perspective(RADIANS_30, halfWidthHeight.x / widthHeight.y, near, far);                         
+        glm::mat4 projectionSide //= glm::ortho(bboxMin.x, bboxMax.x, bboxMin.y, bboxMax.y, bboxMin.z, bboxMax.z);
+                                 = glm::ortho(-aspect, aspect, -1.0f, 1.0f, near, far);
         glm::vec3 mouse;
         if (!insideImGui)
 		{
@@ -1430,75 +1666,9 @@ int main()
 
             if ((buttons & SDL_BUTTON_RMASK) != 0)
             {
-                #ifdef OPTIMIZE
-                #else
-                std::cout << "Right button pressed!" << std::endl;
-                #endif
-                
-                // https://stackoverflow.com/questions/53467077/opengl-ray-tracing-using-inverse-transformations
-                glm::vec2 normalizedMouse = glm::vec2(2.0f, 2.0f) * glm::vec2(mousePositionX, mousePositionY) / widthHeight;
-                float x_ndc = normalizedMouse.x - 1.0;
-                float y_ndc = 1.0 - normalizedMouse.y; // flipped
-
-                glm::vec4 p_near_ndc = glm::vec4(x_ndc, y_ndc, -1.0f, 1.0f); // z near = -1
-                glm::vec4 p_far_ndc  = glm::vec4(x_ndc, y_ndc,  1.0f, 1.0f); // z far = 1
-
-                glm::mat4 invMVP = glm::inverse(projection * view * model);
-
-                glm::vec4 p_near_h = invMVP * p_near_ndc;
-                glm::vec4 p_far_h  = invMVP * p_far_ndc;
-
-                glm::vec3 p0 = glm::vec3(p_near_h) / glm::vec3(p_near_h.w, p_near_h.w, p_near_h.w);
-                glm::vec3 p1 = glm::vec3(p_far_h)  / glm::vec3(p_far_h.w, p_far_h.w, p_far_h.w);
-
-                glm::vec3 rayOri = p0;
-                glm::vec3 rayDir = glm::normalize(p1 - p0);
-
-                nanort::Ray<float> ray;
-                ray.org[0] = rayOri.x;
-                ray.org[1] = rayOri.y;
-                ray.org[2] = rayOri.z;
-
-                ray.dir[0] = rayDir.x;
-                ray.dir[1] = rayDir.y;
-                ray.dir[2] = rayDir.z;
-
-                float kFar = 1.0e+30f;
-                ray.min_t = 0.0f;
-                ray.max_t = kFar;
-
-                nanort::TriangleIntersector<> triangle_intersector(glm::value_ptr(modelDataVertices[0]), &indexes[0], sizeof(float) * 3);
-                nanort::TriangleIntersection<> isect;
-                bool hit = accel.Traverse(ray, triangle_intersector, &isect);
-                if (hit)
-                {
-                    hitPos = rayOri + rayDir * isect.t;
-                    
-                    unsigned int fid = isect.prim_id;
-                    unsigned int id  = indexes[3 * fid];
-                    hitNor = modelDataNormals[id];
-
-                    projectorPos = hitPos + hitNor * PROJECTOR_DISTANCE;
-                    projectorDir = -hitNor;
-
-                    float ratio = float(heightDecal) / float(widthDecal);
-                    float proportionateHeight = projectorSize * ratio;
-
-                    glm::mat4 rotate = glm::mat4(1.0f);
-                    rotate = glm::rotate(rotate, glm::radians(projectorRotation), projectorDir);
-
-                    glm::vec4 axis      = rotate * glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
-                    projectorView       = glm::lookAt(projectorPos, hitPos, axis.xyz());
-                    projectorProjection = glm::ortho(-projectorSize, projectorSize, -proportionateHeight, proportionateHeight, 0.001f, FAR_PLANE);
-
-                    decalProjector = projectorProjection * projectorView;
-                    #ifdef OPTIMIZE
-                    #else
-                    printf("Hit Point: %s\n", glm::to_string(hitPos).c_str());
-                    printf("Hit Normal: %s\n", glm::to_string(hitNor).c_str());
-                    printf("Decal Projector: %s\n", glm::to_string(decalProjector).c_str());
-                    #endif
-                }
+                rayTrace(mousePositionX, mousePositionY, widthHeight, modelDataVertices, 
+                         indexes, projection, view, model, false,
+                         /** Out **/ hitNor, hitPos, decalProjector);
             }
 
 		}
@@ -1516,10 +1686,14 @@ int main()
         {
             normalMap = !normalMap;
         }
-        ImGui::SliderFloat("Texture Coordinates Scale", &scale, 1.0f, 100.0f);
+        ImGui::SliderInt("Texture Coordinates Scale", &scale, 1, 10);
         ImGui::SliderFloat("Blend Factor", &blend, 0.0f, 1.0f);
         ImGui::SliderFloat("Projector Size", &projectorSize, 0.1f, 1.0f);
         ImGui::SliderFloat("Projector Orientation", &projectorRotation, 0.0f, 360.0f); 
+        if (ImGui::Button("Show Bounding Box"))
+        {
+            showBBox = !showBBox;
+        }
         if (ImGui::Button("Show Projector"))      
         {
             showProjector = !showProjector;
@@ -1558,40 +1732,27 @@ int main()
 
         // render
         // ------
-        // Depth pre-pass.
+        /** Start Depth Pre-Pass **/
         glEnable(GL_DEPTH_TEST);
         glDepthMask(true);
         glCullFace(GL_BACK);
-        glBindFramebuffer(GL_FRAMEBUFFER, gBuffer); 
-        
-        geometryPass.use();
-        glm::mat4 mm = glm::mat4(1.0f);
-        geometryPass.setMat4("model", mm);
-        geometryPass.setMat4("projection", projection);
-        geometryPass.setMat4("view", view);
-        geometryPass.setMat4("decalProjector", decalProjector);
-        geometryPass.setFloat("flipAlbedo", (float)flipAlbedo);
+        glBindFramebuffer(GL_FRAMEBUFFER, dBuffer); 
+
+        depthPrePass.use();
         glBindVertexArray(VAO); 
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, material.baseColor);
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, material.normal);
-        // glActiveTexture(GL_TEXTURE2);
-        // glBindTexture(GL_TEXTURE_2D, material.roughness);
-        // glActiveTexture(GL_TEXTURE3);
-        // glBindTexture(GL_TEXTURE_2D, material.metallic);
-        // glActiveTexture(GL_TEXTURE4);
-        // glBindTexture(GL_TEXTURE_2D, material.ao);
+        depthPrePass.setMat4("decalProjector", decalProjector);
+        glViewport(0, 0, screenWidth/4, screenHeight/4);
 
-        glViewport(0, 0, WIDTH/4, HEIGHT/4);
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
+        glClear(GL_DEPTH_BUFFER_BIT);
         glDrawElements(GL_TRIANGLES, indexes.size(), GL_UNSIGNED_INT, 0);
 
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glBindVertexArray(0);
+        /** End Depth Pre-Pass **/
 
+        float flipFloat = (float) flip; 
+        float flipAlbedoFloat = (float) flipAlbedo;
+
+
+        /** Start Decal Pass **/
         glEnable(GL_DEPTH_TEST);
 
         glBindFramebuffer(GL_FRAMEBUFFER, fbo);
@@ -1600,12 +1761,11 @@ int main()
         decalsPass.setMat4("projection", projection);
         decalsPass.setMat4("view", view);
         decalsPass.setVec2("iResolution", widthHeight);
-        decalsPass.setFloat("iScale", scale);
-        decalsPass.setFloat("iFlip", (float)flip);
+        decalsPass.setInt("iScale", scale);
+        decalsPass.setFloat("iFlip", flipFloat);
         decalsPass.setFloat("iBlend", blend);
         decalsPass.setMat4("decalProjector", decalProjector);
-        decalsPass.setFloat("iFlipAlbedo", (float)flipAlbedo);
-        //decalsPass.setFloat("iFlipAlbedo", (float)flipAlbedo);
+        decalsPass.setFloat("iFlipAlbedo", flipAlbedoFloat);
 
         glBindVertexArray(VAO);
 
@@ -1628,12 +1788,9 @@ int main()
             // counter = 0;
             downloadImage = 0u;
         }
+        /** End Decal Pass **/
 
-        glEnable(GL_DEPTH_TEST);
-        glDepthMask(true);
-        glCullFace(GL_BACK);
-
-        // Light pass.
+        /** Start Light Pass **/
         //glScissor(0, 0, screenWidth/2, screenHeight);
         int enableNormals = normalMap ? 1 : 0;
         glViewport(0, 0, screenWidth/2, screenHeight);
@@ -1644,11 +1801,11 @@ int main()
         deferredPass.setMat4("model", model);
         deferredPass.setMat4("projection", projectionHalf);
         deferredPass.setMat4("view", view);
-        deferredPass.setFloat("iFlipAlbedo", (float)flipAlbedo);
+        deferredPass.setFloat("iFlipAlbedo", flipAlbedoFloat);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, material.normal);
         glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, render);
+        glBindTexture(GL_TEXTURE_2D, renderAlbedo);
         // glActiveTexture(GL_TEXTURE2);
         // glBindTexture(GL_TEXTURE_2D, material.metallic);
         // glActiveTexture(GL_TEXTURE3);
@@ -1668,20 +1825,25 @@ int main()
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glBindVertexArray(0);
         
-        // renderQuad();
-
-        // glBindFramebuffer(GL_READ_FRAMEBUFFER, gBuffer);
-        // glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0); // write to default framebuffer
-        // // blit to default framebuffer. Note that this may or may not work as the internal formats of both the FBO and default framebuffer have to match.
-        // // the internal formats are implementation defined. This works on all of my systems, but if it doesn't on yours you'll likely have to write to the 		
-        // // depth buffer in another shader stage (or somehow see to match the default framebuffer's internal format with the FBO's internal format).
-        // glBlitFramebuffer(0, 0, WIDTH, HEIGHT, 0, 0, WIDTH, HEIGHT, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+        /** End Light Pass **/
         
+        if (showBBox)
+        {
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glEnable(GL_DEPTH_TEST);
+
+            hitPosition.use();
+            hitPosition.setMat4("model",      model);
+            hitPosition.setMat4("projection", projectionHalf);
+            hitPosition.setMat4("view",       view);
+            renderLineCube(bboxMin, bboxMax);
+        }
+
         if (showHitPoint)
         {
             glm::mat4 hitPositionModel = model;
             hitPositionModel = glm::translate(hitPositionModel, hitPos);
-            hitPositionModel = glm::scale(hitPositionModel, glm::vec3(0.01));
+            hitPositionModel = glm::scale(hitPositionModel, glm::vec3(0.01f));
 
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
             glEnable(GL_DEPTH_TEST);
@@ -1704,27 +1866,29 @@ int main()
             hitPosition.setMat4("view",       view);
             renderFrustum(decalProjector);
         }
-
+        
         // Side View.
         glViewport(screenWidth/2, 0, screenWidth/2, screenHeight/2);
 
         // Scale for the side view.
         glm::mat4 modelSide = glm::scale(modelNoGuizmo, glm::vec3(zoomSide, zoomSide, zoomSide));
+        modelSide = glm::rotate(modelSide, glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        //modelSide = glm::translate(modelSide, glm::vec3(0.0f, -0.5f, 0.0f) * differenceBboxMaxMin);
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glBindVertexArray(VAO);
         deferredPass.use();
         deferredPass.setMat4("model", modelSide);
         deferredPass.setMat4("projection", projectionSide);
-        deferredPass.setMat4("view", glm::mat4(-0.113205, -0.187880, 0.975646, 0.000000, 
+        deferredPass.setMat4("view", viewPinned);/*glm::mat4(-0.113205, -0.187880, 0.975646, 0.000000, 
                                                0.000000, 0.981959, 0.189095, 0.000000, 
                                                -0.993572, 0.021407, -0.111162, 0.000000, 
-                                               -0.064962, 0.388481, -4.221102, 1.000000));
-        deferredPass.setFloat("iFlipAlbedo", (float)flipAlbedo);
+                                               -0.064962, 0.388481, -4.221102, 1.000000));*/
+        deferredPass.setFloat("iFlipAlbedo", flipAlbedoFloat);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, material.normal);
         glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, render);
+        glBindTexture(GL_TEXTURE_2D, renderAlbedo);
         // glActiveTexture(GL_TEXTURE2);
         // glBindTexture(GL_TEXTURE_2D, material.metallic);
         // glActiveTexture(GL_TEXTURE3);
@@ -1746,21 +1910,22 @@ int main()
 
         // Scale for the side view.
         glm::mat4 modelTop = glm::scale(modelNoGuizmo, glm::vec3(zoomTop, zoomTop, zoomTop));
+        //modelTop = glm::translate(modelTop, glm::vec3(0.0f, -0.5f, 0.5f) * differenceBboxMaxMin);
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glBindVertexArray(VAO);
         deferredPass.use();
         deferredPass.setMat4("model", modelTop);
         deferredPass.setMat4("projection", projectionSide);
-        deferredPass.setMat4("view", glm::mat4(1.0, 0.0,  0.0, 0.0, 
+        deferredPass.setMat4("view", viewPinned);/*glm::mat4(1.0, 0.0,  0.0, 0.0, 
                                                0.0, 1.0,  0.0, 0.0, 
                                                0.0, 0.0,  1.0, 0.0, 
-                                               0.0, 0.0, -1.0, 1.0));
-        deferredPass.setFloat("iFlipAlbedo", (float)flipAlbedo);
+                                               0.0, 0.0, -1.0, 1.0));*/
+        deferredPass.setFloat("iFlipAlbedo", flipAlbedoFloat);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, material.normal);
         glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, render);
+        glBindTexture(GL_TEXTURE_2D, renderAlbedo);
         // glActiveTexture(GL_TEXTURE2);
         // glBindTexture(GL_TEXTURE_2D, material.metallic);
         // glActiveTexture(GL_TEXTURE3);
@@ -1773,7 +1938,7 @@ int main()
         deferredPass.setFloat("iTime", iTime);
 
         glDrawElements(GL_TRIANGLES, indexes.size(), GL_UNSIGNED_INT, 0);
-
+        
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glBindVertexArray(0);
 
@@ -1786,7 +1951,7 @@ int main()
 
         SDL_GL_GetDrawableSize(window, &screenWidth, &screenHeight);
 
-        iTime += 1.0f / 1000.0f;
+        iTime += 1.0f / 100.0f;
         frame++;
         counter++;
         changeDecal = 0u;
